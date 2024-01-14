@@ -9,16 +9,16 @@
 local function dialog_menu()
     local function dialog_func(p)
         local window = TextWindow.new("Change the Plugin Folder Path")
-        local message = string.format("New path is %s\nIf this is correct, press Confirm.\nIf it works, 'welcome to my channel' should be printed\n", p)
+        local message = string.format("New path is %s\nIf this is correct, press Confirm.\nIf it works, the README should be printed\n", p)
         window:set(message)
         window:add_button("Confirm", function()
-            path = p:gsub('\\', '\\\\')
-            local f = io.open(p .. "hi.txt", "r")
+            path = p:gsub('\\', '\\\\') -- replaces all single slashes with a double slash
+            local f = io.open(p .. "README.md", "r")
             io.input(f)
-            line = io.read()
+            content = io.read("*a") -- "*a" reads the entire file
             io.close(f)
-            window:append(line)
-    end)
+            window:append(content)
+        end)
     end
 
     new_dialog("Change Path to Plugin Folder",dialog_func,"Current path: " .. path .. "\n\nNew path (End input in backslash):")
@@ -43,9 +43,9 @@ if micro == "0" then
 else 
     path = "C:\\Program Files\\Wireshark\\plugins\\" .. major .. "." .. minor ..  "." .. micro .. "\\"
 end
-f = io.open(path .. "hi.txt", "r")
+f = io.open(path .. "README.md", "r")
 io.input(f)
-line = io.read()
+content = io.read("*a") -- "*a" reads the entire file
 io.close(f)
 
 --------------------------------------------------------------------------------
@@ -57,6 +57,6 @@ io.close(f)
 -- Notify the user that the menu was created
 if gui_enabled() then
    local splash = TextWindow.new("Hello!");
-   splash:set("Hello! This is a test of file loading; if it works, 'welcome to my channel' should be printed. If this is not the case, go to Tools > Change Path To Plugin Folder\nThe current version is " .. major .. "." .. minor .. "." .. micro .. "\n")
-   splash:append(line)
+   splash:set("Hello! This is a test of file loading; if it works, the README should be printed. If this is not the case, go to Tools > Change Path To Plugin Folder\nThe current version is " .. major .. "." .. minor .. "." .. micro .. "\n")
+   splash:append(content)
 end
