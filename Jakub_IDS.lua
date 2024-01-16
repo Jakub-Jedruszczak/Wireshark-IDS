@@ -1,3 +1,23 @@
+-- Jakub_IDS.lua
+--------------------------------------------------------------------------------
+--[[
+    This is an IDS created to work with Wireshark using various open source
+    signature databases. This plugin is intended to work with offline network
+    traffic captures, but it may be adjusted to work with real-time inputs.
+-- ]]
+
+--------------------------------------------------------------------------------
+
+local my_info = {
+    version = "1.0.0",
+    author = "Jakub Jedruszczak",
+    repository = "https://github.com/Jakub-Jedruszczak/Wireshark-IDS",
+    spdx_id = "GPL-2.0-or-later",
+    description = "A threat detection engine for Wireshark."
+}
+
+set_plugin_info(my_info)
+
 --------------------------------------------------------------------------------
 -- This creates the dialogue menu for changing the path to the file
 -- to be loaded. This is necessary because my way of guessing the Plugin folder
