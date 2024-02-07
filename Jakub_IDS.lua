@@ -5,7 +5,6 @@
     signature databases. This plugin is intended to work with offline network
     traffic captures, but it may be adjusted to work with real-time inputs.
 -- ]]
-
 --------------------------------------------------------------------------------
 
 local my_info = {
@@ -22,7 +21,7 @@ set_plugin_info(my_info)
 -- This creates the dialogue menu for changing the path to the file
 -- to be loaded. This is necessary because my way of guessing the Plugin folder
 -- path may not be accurate, so changing this is pretty important in order for
--- the program to work. Opens 'hi.txt' to confirm that the path works.
+-- the program to work. Opens 'README.md' to confirm that the path works.
 --------------------------------------------------------------------------------
 
 -- Define the menu entry's callback
@@ -48,9 +47,9 @@ end
 register_menu("Change Path to Plugin Folder", dialog_menu, MENU_TOOLS_UNSORTED)
 
 --------------------------------------------------------------------------------
--- This generates the plugin folder from the major, minor and micro version
--- numbers which are used for the plugin folder. The micro version is not in the
--- folder name if it's 0, which is accounted for with the if statement.
+-- This generates the plugin folder path from the major, minor and micro version
+-- numbers. The micro version is not in the folder name if it's 0, which is 
+-- accounted for with the if statement.
 --------------------------------------------------------------------------------
 
 -- Get version for automatically detecting the file path
