@@ -89,7 +89,7 @@ end
 -- (Adapted from :https://www.wireshark.org/docs/wsdg_html_chunked/wslua_tap_example.html)
 --------------------------------------------------------------------------------
 
-local function menuable_tap()
+local function counting_tap()
 	-- Declare the window we will use
 	local tw = TextWindow.new("Address Counter")
 
@@ -147,4 +147,5 @@ end
 
 -- using this function we register our function
 -- to be called when the user selects the Tools->Test->Packets menu
-register_menu("Test/Packets", menuable_tap, MENU_TOOLS_UNSORTED)
+
+--------------------------------------------------------------------------------
