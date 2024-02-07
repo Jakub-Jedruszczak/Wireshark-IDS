@@ -80,3 +80,71 @@ if gui_enabled() then
    splash:append("\nThe current version is " .. major .. "." .. minor .. "." .. micro .. "\n")
    splash:append(content)
 end
+
+--------------------------------------------------------------------------------
+-- A simple tap/ listener used as a proof of concept and an attempt at filtering
+-- packets and acting upon their data. This menu presents all packets with a TCP
+-- port of 80, 433, or 8080. It shows the number of times these packets came 
+-- from a source address as well as the overall count of filter-matching packets.
+-- (Adapted from :https://www.wireshark.org/docs/wsdg_html_chunked/wslua_tap_example.html)
+--------------------------------------------------------------------------------
+
+local function menuable_tap()
+	-- Declare the window we will use
+	local tw = TextWindow.new("Address Counter")
+
+	-- This will contain a hash of counters of appearances of a certain address
+	local ips = {}
+    local counter = 0 -- total packet count
+
+	-- this is our tap
+	local tap = Listener.new(nil, "tcp.port in {80, 443, 8080}");
+
+	local function remove()
+		-- this way we remove the listener that otherwise will remain running indefinitely
+		tap:remove();
+	end
+
+	-- we tell the window to call the remove() function when closed
+	tw:set_atclose(remove)
+
+	-- this function will be called once for each packet
+	function tap.packet(pinfo, tvb)
+        local key = tostring(pinfo.src)
+    
+        if ips[key] == nil then
+            ips[key] = {0, tostring(pinfo.src_port), tostring(pinfo.dst_port)}  -- Initialize with default values if the key doesn't exist
+        end
+
+        local count = ips[key][1]
+        local s_port = ips[key][2]
+        local d_port = ips[key][3]
+
+        ips[key] = {count + 1, s_port, d_port}  -- Update the values
+        counter = counter + 1
+	end
+
+	-- this function will be called once every few seconds to update our window
+	function tap.draw(t)
+		tw:clear()
+        tw:append("Source IP\t\tCount\tSource Port \tDestination Port \t(Matching Packets:" .. counter ..")\n")
+		for key, values in pairs(ips) do
+			tw:append(key .. "\t" .. values[1] .. "\t" .. values[2] .. "\t\t" .. values[3] .."\n");
+		end
+	end
+
+	-- this function will be called whenever a reset is needed
+	-- e.g. when reloading the capture file
+	function tap.reset()
+		tw:clear()
+		ips = {}
+        counter = 0
+	end
+
+	-- Ensure that all existing packets are processed.
+	retap_packets()
+end
+
+-- using this function we register our function
+-- to be called when the user selects the Tools->Test->Packets menu
+register_menu("Test/Packets", menuable_tap, MENU_TOOLS_UNSORTED)
