@@ -89,7 +89,7 @@ end
 -- (Adapted from :https://www.wireshark.org/docs/wsdg_html_chunked/wslua_tap_example.html)
 --------------------------------------------------------------------------------
 
-local function menuable_tap()
+local function counting_tap()
 	-- Declare the window we will use
 	local tw = TextWindow.new("Address Counter")
 
@@ -147,4 +147,67 @@ end
 
 -- using this function we register our function
 -- to be called when the user selects the Tools->Test->Packets menu
-register_menu("Test/Packets", menuable_tap, MENU_TOOLS_UNSORTED)
+register_menu("Test/Packets", counting_tap, MENU_TOOLS_UNSORTED)
+
+--------------------------------------------------------------------------------
+-- A simple tap to test packet dissection. This particular one extracts the URL
+-- of packets from HTTP(s) traffic. 
+--------------------------------------------------------------------------------
+
+-- Creating a field reader before the listener is initalised
+local uri = Field.new("http.request.uri")
+local host = Field.new("http.host")
+
+local function http_tap()
+	-- Declare the window we will use
+	local tw = TextWindow.new("Address Counter")
+
+	-- This will contain a hash of counters of appearances of a certain address
+	local websites = {}
+    local counter = 0
+
+	-- this is our tap
+	local tap = Listener.new(nil, "http.request");
+
+	local function remove()
+		-- this way we remove the listener that otherwise will remain running indefinitely
+		tap:remove();
+	end
+
+	-- we tell the window to call the remove() function when closed
+	tw:set_atclose(remove)
+
+	-- this function will be called once for each packet
+	function tap.packet(pinfo, tvb)
+        local http_data = tvb:range():string()
+
+        local uri = tostring(uri())
+        local host = tostring(host())
+        local ip = tostring(pinfo.src)
+        websites[counter] = {ip, host, uri}
+        counter = counter + 1
+	end
+
+	-- this function will be called once every few seconds to update our window
+	function tap.draw(t)
+		tw:clear()
+        tw:append("Source IP\t\tHost\t\tWebsite\n")
+		for key, values in pairs(websites) do
+			tw:append(values[1].. "\t" .. values[2] .."\t" .. values[3] .. "\n");
+		end
+	end
+
+	-- this function will be called whenever a reset is needed
+	-- e.g. when reloading the capture file
+	function tap.reset()
+		tw:clear()
+		--websites = {}
+	end
+
+	-- Ensure that all existing packets are processed.
+	retap_packets()
+end
+
+-- using this function we register our function
+-- to be called when the user selects the Tools->Test->Packets menu
+register_menu("Test/HTTP", http_tap, MENU_TOOLS_UNSORTED)
