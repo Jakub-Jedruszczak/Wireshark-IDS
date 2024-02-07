@@ -147,5 +147,6 @@ end
 
 -- using this function we register our function
 -- to be called when the user selects the Tools->Test->Packets menu
+register_menu("Test/Packets", counting_tap, MENU_TOOLS_UNSORTED)
 
 --------------------------------------------------------------------------------
