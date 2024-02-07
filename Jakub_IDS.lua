@@ -76,6 +76,7 @@ io.close(f)
 -- Notify the user that the menu was created
 if gui_enabled() then
    local splash = TextWindow.new("Hello!");
-   splash:set("Hello! This is a test of file loading; if it works, the README should be printed. If this is not the case, go to Tools > Change Path To Plugin Folder\nThe current version is " .. major .. "." .. minor .. "." .. micro .. "\n")
+   splash:set("Hello! This is a test of file loading; if it works, the README should be printed. If this is not the case, go to Tools > Change Path To Plugin Folder")
+   splash:append("\nThe current version is " .. major .. "." .. minor .. "." .. micro .. "\n")
    splash:append(content)
 end
