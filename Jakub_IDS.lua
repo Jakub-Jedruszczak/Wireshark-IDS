@@ -75,7 +75,7 @@ io.close(f)
 
 -- Notify the user that the menu was created
 if gui_enabled() then
-   local splash = TextWindow.new("Hello!")
+   local splash = TextWindow.new("Hello!");
    splash:set("Hello! This is a test of file loading; if it works, the README should be printed. If this is not the case, go to Tools > Change Path To Plugin Folder")
    splash:append("\nThe current version is " .. major .. "." .. minor .. "." .. micro .. "\n")
    splash:append(content)
@@ -98,11 +98,11 @@ local function counting_tap()
     local counter = 0 -- total packet count
 
 	-- this is our tap
-	local tap = Listener.new(nil, "tcp.port in {80, 443, 8080}")
+	local tap = Listener.new(nil, "tcp.port in {80, 443, 8080}");
 
 	local function remove()
 		-- this way we remove the listener that otherwise will remain running indefinitely
-		tap:remove()
+		tap:remove();
 	end
 
 	-- we tell the window to call the remove() function when closed
@@ -129,7 +129,7 @@ local function counting_tap()
 		tw:clear()
         tw:append("Source IP\t\tCount\tSource Port \tDestination Port \t(Matching Packets:" .. counter ..")\n")
 		for key, values in pairs(ips) do
-			tw:append(key .. "\t" .. values[1] .. "\t" .. values[2] .. "\t\t" .. values[3] .."\n")
+			tw:append(key .. "\t" .. values[1] .. "\t" .. values[2] .. "\t\t" .. values[3] .."\n");
 		end
 	end
 
@@ -167,11 +167,11 @@ local function http_tap()
     local counter = 0
 
 	-- this is our tap
-	local tap = Listener.new(nil, "http.request")
+	local tap = Listener.new(nil, "http.request");
 
 	local function remove()
 		-- this way we remove the listener that otherwise will remain running indefinitely
-		tap:remove()
+		tap:remove();
 	end
 
 	-- we tell the window to call the remove() function when closed
@@ -193,7 +193,7 @@ local function http_tap()
 		tw:clear()
         tw:append("Source IP\t\tHost\t\tWebsite\n")
 		for key, values in pairs(websites) do
-			tw:append(values[1].. "\t" .. values[2] .."\t" .. values[3] .. "\n")
+			tw:append(values[1].. "\t" .. values[2] .."\t" .. values[3] .. "\n");
 		end
 	end
 
