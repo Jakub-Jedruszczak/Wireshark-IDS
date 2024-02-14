@@ -211,3 +211,52 @@ end
 -- using this function we register our function
 -- to be called when the user selects the Tools->Test->Packets menu
 register_menu("Test/HTTP", http_tap, MENU_TOOLS_UNSORTED)
+
+
+--------------------------------------------------------------------------------
+-- An attempt to add another column to the main view, showing the URI of HTTP 
+-- packets. This uses a post-dissector to modify the view as taps can't modify
+-- the dissected packets. This is a dummy post-dissector that "checks" if a
+-- packet is malicious by checking if the source port number is odd or even.
+
+-- (Adapted from https://wiki.wireshark.org/Lua/Examples/PostDissector)
+-- (partially)
+--------------------------------------------------------------------------------
+
+
+-- we create a "protocol" for our tree
+local sus_p = Proto("suspiciousness","A measure of how suspicious the packet is")
+
+-- we create our fields
+local sus_field = ProtoField.string("Suspiciousness")
+local sus_reason_field = ProtoField.string("Reason")
+
+-- we add our fields to the protocol
+sus_p.fields = {sus_field}
+
+-- then we register sus_p as a postdissector
+register_postdissector(sus_p)
+
+
+-- main post-dissector
+function sus_p.dissector(tvb, pinfo, tree)
+
+	local sp = pinfo.src_port
+	local reason = ""
+	is_sus = 0
+	-- dummy check for if a packet is suspicious - even source port numbers and suspicious and vice versa
+	if sp % 2 == 0 then
+		is_sus = "Suspicious"
+		reason = "How odd! This packet's source port number is even."
+	else
+		is_sus = "Benign"
+		reason = "Nothing wrong with it."
+	end
+
+	-- I would love to be able to colourise the packets if they're suspicious but apparently that's not possible
+	-- (https://osqa-ask.wireshark.org/questions/9511/is-it-possible-to-set-the-coloring-of-a-packet-from-a-dissector/)
+    tree:add(sus_field, is_sus)
+	tree:add_le(sus_reason_field, reason)
+	--tree:add(sus_reason_field, reason)
+	tree:set_generated()
+
