@@ -260,3 +260,4 @@ function sus_p.dissector(tvb, pinfo, tree)
 	--tree:add(sus_reason_field, reason)
 	tree:set_generated()
 
+end
