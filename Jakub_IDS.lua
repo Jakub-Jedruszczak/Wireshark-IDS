@@ -17,6 +17,44 @@ local my_info = {
 
 set_plugin_info(my_info)
 
+
+--------------------------------------------------------------------------------
+-- This function reads CSV files and returns them as a Lua table. Useful for
+-- reading signatures, blacklist IP tables, etc. especially since Lua tables
+-- can be referenced both by key and by index.
+--------------------------------------------------------------------------------
+
+function ReadCSV(filename)
+	local file = io.open(path .. filename, "r") -- No need to add the path in manually!
+	if not file then return nil end -- If file doesn't exist, return nil
+
+	local data = {} -- Table to store the CSV data
+
+	for line in file:lines() do -- Iterate over each line in the file
+		local row = {} -- Table to store the current row data
+
+		for value in line:gmatch("[^,]+") do -- Split the line by comma
+			table.insert(row, value) -- Insert each value into the row table
+		end
+
+		table.insert(data, row) -- Insert the row into the data table
+	end
+
+	file:close() -- Close the file
+	return data -- Return the CSV data
+end
+
+--[[
+	***** EXAMPLE USAGE *****
+tbl = ReadCSV("blacklist.csv")
+txt = ""
+for _, row in ipairs(tbl) do
+    txt = txt ..table.concat(row, "\t\t\t ") -- Print each row with values separated by comma
+	txt = txt .. "\n"
+end
+--]]
+
+
 --------------------------------------------------------------------------------
 -- This creates the dialogue menu for changing the path to the file
 -- to be loaded. This is necessary because my way of guessing the Plugin folder
@@ -56,7 +94,7 @@ register_menu("Change Path to Plugin Folder", dialog_menu, MENU_TOOLS_UNSORTED)
 local major, minor, micro = get_version():match("(%d+)%.(%d+)%.(%d+)")
 
 -- Loads a file
--- local default_path = "C:\\Program Files\\Wireshark\\plugins\\4.2\\" -- my path
+-- local default_path = "C:\\Program Files\\Wireshark\\plugins\\4.2\\" -- my personal path
 if micro == "0" then 
     path = "C:\\Program Files\\Wireshark\\plugins\\" .. major .. "." .. minor .. "\\"
 else 
@@ -66,9 +104,15 @@ f = io.open(path .. "README.md", "r")
 io.input(f)
 content = io.read("*a") -- "*a" reads the entire file
 io.close(f)
+txt1 = ReadCSV("blacklist.csv")
+txt = ""
+for _, row in ipairs(txt1) do
+    txt = txt ..table.concat(row, "\t\t\t ") -- Print each row with values separated by comma
+	txt = txt .. "\n"
+end
 
 --------------------------------------------------------------------------------
--- Opens 'hi.txt' on loading Wireshark to confirm that the file loading
+-- Opens 'README.md' on loading Wireshark to confirm that the file loading
 -- functionality works correctly. This entire project relies on loading external
 -- files, so this is pretty important!
 --------------------------------------------------------------------------------
@@ -79,6 +123,7 @@ if gui_enabled() then
    splash:set("Hello! This is a test of file loading; if it works, the README should be printed. If this is not the case, go to Tools > Change Path To Plugin Folder")
    splash:append("\nThe current version is " .. major .. "." .. minor .. "." .. micro .. "\n")
    splash:append(content)
+   splash:append(txt)
 end
 
 --------------------------------------------------------------------------------
@@ -201,7 +246,7 @@ local function http_tap()
 	-- e.g. when reloading the capture file
 	function tap.reset()
 		tw:clear()
-		websites = {}
+		--websites = {}
 	end
 
 	-- Ensure that all existing packets are processed.
@@ -239,12 +284,12 @@ register_postdissector(sus_p)
 
 
 -- main post-dissector
-function sus_p.dissector(tvb, pinfo, tree)
+function sus_p.dissector(tvb,pinfo,tree)
 
 	local sp = pinfo.src_port
 	local reason = ""
 	is_sus = 0
-	-- dummy check for if a packet is suspicious - even source port numbers and suspicious and vice versa
+
 	if sp % 2 == 0 then
 		is_sus = "Suspicious"
 		reason = "How odd! This packet's source port number is even."
