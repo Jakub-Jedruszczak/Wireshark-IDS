@@ -17,6 +17,44 @@ local my_info = {
 
 set_plugin_info(my_info)
 
+
+--------------------------------------------------------------------------------
+-- This function reads CSV files and returns them as a Lua table. Useful for
+-- reading signatures, blacklist IP tables, etc. especially since Lua tables
+-- can be referenced both by key and by index.
+--------------------------------------------------------------------------------
+
+function ReadCSV(filename)
+	local file = io.open(path .. filename, "r") -- No need to add the path in manually!
+	if not file then return nil end -- If file doesn't exist, return nil
+
+	local data = {} -- Table to store the CSV data
+
+	for line in file:lines() do -- Iterate over each line in the file
+		local row = {} -- Table to store the current row data
+
+		for value in line:gmatch("[^,]+") do -- Split the line by comma
+			table.insert(row, value) -- Insert each value into the row table
+		end
+
+		table.insert(data, row) -- Insert the row into the data table
+	end
+
+	file:close() -- Close the file
+	return data -- Return the CSV data
+end
+
+--[[
+	***** EXAMPLE USAGE *****
+tbl = ReadCSV("blacklist.csv")
+txt = ""
+for _, row in ipairs(tbl) do
+    txt = txt ..table.concat(row, "\t\t\t ") -- Print each row with values separated by comma
+	txt = txt .. "\n"
+end
+--]]
+
+
 --------------------------------------------------------------------------------
 -- This creates the dialogue menu for changing the path to the file
 -- to be loaded. This is necessary because my way of guessing the Plugin folder
