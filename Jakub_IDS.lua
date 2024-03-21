@@ -134,6 +134,8 @@ end
 -- (Adapted from :https://www.wireshark.org/docs/wsdg_html_chunked/wslua_tap_example.html)
 --------------------------------------------------------------------------------
 
+local frame_prots = Field.new("frame.protocols")
+
 local function counting_tap()
 	-- Declare the window we will use
 	local tw = TextWindow.new("Address Counter")
@@ -143,7 +145,7 @@ local function counting_tap()
     local counter = 0 -- total packet count
 
 	-- this is our tap
-	local tap = Listener.new(nil, "tcp.port in {80, 443, 8080}");
+	local tap = Listener.new(nil, nil);
 
 	local function remove()
 		-- this way we remove the listener that otherwise will remain running indefinitely
@@ -156,16 +158,20 @@ local function counting_tap()
 	-- this function will be called once for each packet
 	function tap.packet(pinfo, tvb)
         local key = tostring(pinfo.src)
+		local prts = tostring(frame_prots()):match("([^:]+)$") -- get the last protocol in the stack
+		local p = tostring(frame_prots())
     
         if ips[key] == nil then
-            ips[key] = {0, tostring(pinfo.src_port), tostring(pinfo.dst_port)}  -- Initialize with default values if the key doesn't exist
+            ips[key] = {0, tostring(pinfo.src_port), tostring(pinfo.dst_port), prts, p}  -- Initialize with default values if the key doesn't exist
         end
 
         local count = ips[key][1]
         local s_port = ips[key][2]
         local d_port = ips[key][3]
+		local prots = ips[key][4]
+		local p = ips[key][5]
 
-        ips[key] = {count + 1, s_port, d_port}  -- Update the values
+        ips[key] = {count + 1, s_port, d_port, prots, p}  -- Update the values
         counter = counter + 1
 	end
 
@@ -174,7 +180,15 @@ local function counting_tap()
 		tw:clear()
         tw:append("Source IP\t\tCount\tSource Port \tDestination Port \t(Matching Packets:" .. counter ..")\n")
 		for key, values in pairs(ips) do
-			tw:append(key .. "\t" .. values[1] .. "\t" .. values[2] .. "\t\t" .. values[3] .."\n");
+			local s = key .. "\t"
+			if values[1] ~= nil then s = s..values[1] .. "\t" end
+			if values[2] ~= nil then s = s..values[2] .. "\t" end
+			if values[3] ~= nil then s = s..values[3] .. "\t" end
+			if values[4] ~= nil then s = s..values[4] .. "\t" end
+			if values[5] ~= nil then s = s..values[5] .. "\t" end
+			s = s .. "\n"
+
+			tw:append(s)
 		end
 	end
 
@@ -229,7 +243,8 @@ local function http_tap()
         local uri = tostring(uri())
         local host = tostring(host())
         local ip = tostring(pinfo.src)
-        websites[counter] = {ip, host, uri}
+		local prts = tostring(frame_prots())
+        websites[counter] = {ip, host, uri,prts}
         counter = counter + 1
 	end
 
@@ -238,7 +253,7 @@ local function http_tap()
 		tw:clear()
         tw:append("Source IP\t\tHost\t\tWebsite\n")
 		for key, values in pairs(websites) do
-			tw:append(values[1].. "\t" .. values[2] .."\t" .. values[3] .. "\n");
+			tw:append(values[1].. "\t" .. values[2] .."\t" .. values[3].. "\t" .. values[4] .. "\n");
 		end
 	end
 
@@ -297,13 +312,150 @@ function sus_p.dissector(tvb,pinfo,tree)
 		is_sus = "Benign"
 		reason = "Nothing wrong with it."
 	end
+	--local score = IDS(tvb, pinfo, tree)
+	if pinfo.in_error_pkt then -- return value for error packets
+		reason = "ERROR PACKET"
+		is_sus = "ERROR"
+	end
 
 	-- I would love to be able to colourise the packets if they're suspicious but apparently that's not possible
 	-- (https://osqa-ask.wireshark.org/questions/9511/is-it-possible-to-set-the-coloring-of-a-packet-from-a-dissector/)
-    tree:add(sus_field, is_sus)
+	tree:add(sus_field, is_sus)
 	tree:add_le(sus_reason_field, reason)
+	tree:add_le(sus_reason_field, "The identified protocol was: ".. tostring(frame_prots()):match("([^:]+)$") .. "   (" .. tostring(frame_prots()) .. ")") -- adding the identified protocol
 	--tree:add(sus_reason_field, reason)
 	tree:set_generated()
 
 end
 
+
+--------------------------------------------------------------------------------
+-- The main function for the IDS to work; this function determines if a packet
+-- is suspicious or not.
+--------------------------------------------------------------------------------
+
+--[[
+	TODO:
+	*MAKE SIGNATURES*
+	- Need to make signatures for detecting sus activity
+	- Need easy format: maybe NAME, PROTOCOL, TYPE (length check, header check, etc), VALUE TO CHECK AGAINST, PRIORITY???
+
+	*ALERT AND LOGGING*
+	- Output file which will store alerts
+	- Use a standard format so that it can be integrated into SIEMs
+
+	*BLACKLIST-BASED IP FILTER*
+	- Load IP Blacklist as a table
+		- FORMAT: {IP address:[good packet count, bad packet count, [matched signatures] ]}
+	- Every 5 seconds or so, check if an IP still belongs in the blacklist (see Meng et al. 2014)
+		- pinfo.rel_ts shows the relative time of the packet from when capture started
+	- Do the signatures that the source IP matched on in the past
+		- If it matches the signature(s), then mark as suspicious, add to the number of bad packets recieved, and mark as suspicious
+		- If it doesn't match any signatures, pass it to the NIDS for further inspection
+	
+	*MAIN IDS*
+	- Look for stuff that shows the packet doesn't need to be analysed (i.e, TCP flags, stuff like that)
+	- Check what signature sets to apply to the packet based on protocol/ port
+	- Check against the signatures using technqiues below
+
+	*CHECKING FOR SIGNATURE MATCHES*
+	- tvb:__tostring() converts the bytes of the tvb into a string (said to be used mostly for debugging)
+	- tvb:raw() apparently also does something like this
+	- Boyer-Moore is good for medium-to-long signatures in long text
+			- Maybe use Boyer-Moore-Horspool like Snort: its simplified and only uses one table
+	- Maybe use a different one for very short (1-3 byte) signatures
+	- If a signature matches, add IP to blacklist along with all the signatures it matched
+	- If no signature matches and the IP is in the blacklist, add one to the number of good packets
+	- If no sig. matches and it isn't in the blacklist, mark as benign and let it go
+			- Do not add one to it's blacklist as it shouldn't exit yet, plus adding it would make no sense
+]]
+
+-- each entry will have the following format:
+-- key: Source IP; Contents: array [bad packets, good packets]
+
+frame_protocols_f = Field.new("frame.protocols") -- For finding the highest protocol in the stack, e.g. "tcp" in the stack "eth:ethertype:ip:tcp"
+
+blacklisted_IPs = ReadCSV("blacklist.csv")
+
+
+function IDS(tvb, pinfo, tree)
+	--[[
+	RETURN VALUES:
+		-1 = error packet; mark as error
+		>1 = suspicious
+		0  = benign
+
+	IDENTIFIED PROTOCOLS:
+		- HTTP: a HTTP request packet
+		- data-text-lines: A HTTP response packet
+		- data: can be ICMP packets, "portmap" packets, TCP packets, NFS packets
+		- SLL: Linux Cooked-Mode Capture, essentially a bypass of Linux not dealing with libpcap well
+		- RPC: 
+		- MOUNT: 
+		- BITTORRENT: 
+		- SSH: 
+		- POP: 
+		- IMAP: 
+		- IMF: Internet message format, another mail protocol built alongside SMTP
+		- NFS: Network File System, probably worth checking this for malware
+		- 
+	
+	EXAMPLE SIGNATURES:
+		- Large ICMP/ping packets are VERY suspicious, do a length check, for example with bytearray:len()
+		- Frequency of packets, detecting DoS/ port scanning
+		- SSL/TLS check for HTTPS - don't scan much of those packets since they're encrypted
+		- Check for IPSec? Those are also encrypted
+		- 
+	]]
+
+	-- Firstly checking for flags and such that would make analysing the packet unnecessary
+	-- Routine protocols like ARP; probably better to do statistical sigs for them anyway
+	-- Encrypted protocols
+	-- Whitelists?
+	-- Internal network traffic - gotta be careful with this
+	-- (Do it here)
+
+	-- pinfo.in_error_pkt shows if the packet is an error packet
+	 if pinfo.in_error_pkt then
+		return -1
+	 end
+
+	-- Secondly checking for blacklisted IP addresses; inspired by Meng et al.'s (2014) work at reducing false positive rates
+	-- Expand blacklisted IPs with blacklisted user agents? (for HTTP(S) packets)
+	local ip_src = tostring(pinfo.src)
+	local prts = tostring(frame_protocols_f()):match("([^:]+)$") -- get the last protocol in the stack
+
+	if blacklisted_IPs[ip_src] ~= nil then
+		-- Call SignatureCheck() using the signatures that match for the IP address
+			-- If any of the signatures match, return "suspicious" and increment the number of bad packets; send
+				-- Also log the alert
+			-- If the packet doesn't match any signatures, send it to the rest of the signatures
+	else
+		-- Call SignatureCheck() using all the signatures
+			-- If any of the signatures match, return "suspicious" and add the source IP to the blacklist and add the signature to the blacklist too
+				-- Also log the alert
+			-- If the packet doesn't match any signatures, its benign
+	end
+end
+
+function FindProto()
+	-- Function to find the protocol that the packet uses so that it may be analysed using the signatures made for that proto
+	-- pinfo.curr_proto shows proto that is being analysed
+	-- pinfo.p2p_dir shows direction of packet (incoming/outgoing)
+	-- Return signature sets to be used
+	local prot = frame_protocols_f()
+
+end
+
+function MultiSigCheck()
+	-- Check here for multiple signatures
+	-- Multiple calls to SignatureCheck()
+	-- (Basically a for loop going over all the signatures passed in through the args)
+	-- Return signatures matched (or better to do it directly here?), true/false
+end
+
+function SignatureCheck()
+	-- Check here for individual signatures
+	-- pinfo.match_string - "Matched string for calling subdissector from table."
+	-- return true/false
+end
