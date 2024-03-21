@@ -267,6 +267,11 @@ function sus_p.dissector(tvb, pinfo, tree)
 		is_sus = "Benign"
 		reason = "Nothing wrong with it."
 	end
+	--local score = IDS(tvb, pinfo, tree)
+	if pinfo.in_error_pkt then -- return value for error packets
+		reason = "ERROR PACKET"
+		is_sus = "ERROR"
+	end
 
 	-- I would love to be able to colourise the packets if they're suspicious but apparently that's not possible
 	-- (https://osqa-ask.wireshark.org/questions/9511/is-it-possible-to-set-the-coloring-of-a-packet-from-a-dissector/)
