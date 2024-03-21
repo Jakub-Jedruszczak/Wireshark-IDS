@@ -277,6 +277,7 @@ function sus_p.dissector(tvb, pinfo, tree)
 	-- (https://osqa-ask.wireshark.org/questions/9511/is-it-possible-to-set-the-coloring-of-a-packet-from-a-dissector/)
     tree:add(sus_field, is_sus)
 	tree:add_le(sus_reason_field, reason)
+	tree:add_le(sus_reason_field, "The identified protocol was: ".. tostring(frame_prots()):match("([^:]+)$") .. "   (" .. tostring(frame_prots()) .. ")") -- adding the identified protocol
 	--tree:add(sus_reason_field, reason)
 	tree:set_generated()
 
