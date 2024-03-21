@@ -104,6 +104,12 @@ f = io.open(path .. "README.md", "r")
 io.input(f)
 content = io.read("*a") -- "*a" reads the entire file
 io.close(f)
+txt1 = ReadCSV("blacklist.csv")
+txt = ""
+for _, row in ipairs(txt1) do
+    txt = txt ..table.concat(row, "\t\t\t ") -- Print each row with values separated by comma
+	txt = txt .. "\n"
+end
 
 --------------------------------------------------------------------------------
 -- Opens 'hi.txt' on loading Wireshark to confirm that the file loading
@@ -117,6 +123,7 @@ if gui_enabled() then
    splash:set("Hello! This is a test of file loading; if it works, the README should be printed. If this is not the case, go to Tools > Change Path To Plugin Folder")
    splash:append("\nThe current version is " .. major .. "." .. minor .. "." .. micro .. "\n")
    splash:append(content)
+   splash:append(txt)
 end
 
 --------------------------------------------------------------------------------
