@@ -198,7 +198,8 @@ local function http_tap()
         local uri = tostring(uri())
         local host = tostring(host())
         local ip = tostring(pinfo.src)
-        websites[counter] = {ip, host, uri}
+		local prts = tostring(frame_prots())
+        websites[counter] = {ip, host, uri,prts}
         counter = counter + 1
 	end
 
@@ -207,7 +208,7 @@ local function http_tap()
 		tw:clear()
         tw:append("Source IP\t\tHost\t\tWebsite\n")
 		for key, values in pairs(websites) do
-			tw:append(values[1].. "\t" .. values[2] .."\t" .. values[3] .. "\n");
+			tw:append(values[1].. "\t" .. values[2] .."\t" .. values[3].. "\t" .. values[4] .. "\n");
 		end
 	end
 
