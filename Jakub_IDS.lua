@@ -89,6 +89,8 @@ end
 -- (Adapted from :https://www.wireshark.org/docs/wsdg_html_chunked/wslua_tap_example.html)
 --------------------------------------------------------------------------------
 
+local frame_prots = Field.new("frame.protocols")
+
 local function counting_tap()
 	-- Declare the window we will use
 	local tw = TextWindow.new("Address Counter")
@@ -98,7 +100,7 @@ local function counting_tap()
     local counter = 0 -- total packet count
 
 	-- this is our tap
-	local tap = Listener.new(nil, "tcp.port in {80, 443, 8080}");
+	local tap = Listener.new(nil, nil);
 
 	local function remove()
 		-- this way we remove the listener that otherwise will remain running indefinitely
@@ -111,16 +113,20 @@ local function counting_tap()
 	-- this function will be called once for each packet
 	function tap.packet(pinfo, tvb)
         local key = tostring(pinfo.src)
+		local prts = tostring(frame_prots()):match("([^:]+)$") -- get the last protocol in the stack
+		local p = tostring(frame_prots())
     
         if ips[key] == nil then
-            ips[key] = {0, tostring(pinfo.src_port), tostring(pinfo.dst_port)}  -- Initialize with default values if the key doesn't exist
+            ips[key] = {0, tostring(pinfo.src_port), tostring(pinfo.dst_port), prts, p}  -- Initialize with default values if the key doesn't exist
         end
 
         local count = ips[key][1]
         local s_port = ips[key][2]
         local d_port = ips[key][3]
+		local prots = ips[key][4]
+		local p = ips[key][5]
 
-        ips[key] = {count + 1, s_port, d_port}  -- Update the values
+        ips[key] = {count + 1, s_port, d_port, prots, p}  -- Update the values
         counter = counter + 1
 	end
 
@@ -129,7 +135,15 @@ local function counting_tap()
 		tw:clear()
         tw:append("Source IP\t\tCount\tSource Port \tDestination Port \t(Matching Packets:" .. counter ..")\n")
 		for key, values in pairs(ips) do
-			tw:append(key .. "\t" .. values[1] .. "\t" .. values[2] .. "\t\t" .. values[3] .."\n");
+			local s = key .. "\t"
+			if values[1] ~= nil then s = s..values[1] .. "\t" end
+			if values[2] ~= nil then s = s..values[2] .. "\t" end
+			if values[3] ~= nil then s = s..values[3] .. "\t" end
+			if values[4] ~= nil then s = s..values[4] .. "\t" end
+			if values[5] ~= nil then s = s..values[5] .. "\t" end
+			s = s .. "\n"
+
+			tw:append(s)
 		end
 	end
 
