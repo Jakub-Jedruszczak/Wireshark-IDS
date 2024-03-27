@@ -19,29 +19,127 @@ set_plugin_info(my_info)
 
 
 --------------------------------------------------------------------------------
--- This function reads CSV files and returns them as a Lua table. Useful for
--- reading signatures, blacklist IP tables, etc. especially since Lua tables
--- can be referenced both by key and by index.
+-- This function loads the signatures from a CSV file into Wireshark's memory.
+-- I decided to use the SNORT signature format for compatibility and so that
+-- users don't have to learn a new format. This doesn't use the ReadCSV function
+-- since simple pattern matching is not enough to properly parse the format.
 --------------------------------------------------------------------------------
 
-function ReadCSV(filename)
-	local file = io.open(path .. filename, "r") -- No need to add the path in manually!
-	if not file then return nil end -- If file doesn't exist, return nil
+function SignatureReader(filename)
+	local file = io.open(path .. filename, "r")
+	if not file then 
+		print("Error: Unable to open file " .. filename)
+		return nil 
+	end
 
-	local data = {} -- Table to store the CSV data
+	local data = {}
 
-	for line in file:lines() do -- Iterate over each line in the file
-		local row = {} -- Table to store the current row data
+	for line in file:lines() do
+		local signature = {}
 
-		for value in line:gmatch("[^,]+") do -- Split the line by comma
-			table.insert(row, value) -- Insert each value into the row table
+		-- Extracting individual components from the signature - thank god for line breaks
+		local action, protocol, source, source_port, direction, destination, destination_port, options = 
+			line:match("(%w+)%s+(%w+)%s+(%S+)%s+(%S+)%s+([%-<>]+)%s+(%S+)%s+(%S+)%s+%((.*)%)")
+
+		if not action then
+			print("Error: Unable to parse line: " .. line)
+			file:close()
+			return nil
 		end
 
-		table.insert(data, row) -- Insert the row into the data table
+		-- Setting up key-value pairs
+		signature["action"] = action
+		signature["protocol"] = protocol
+		signature["source address"] = source
+		signature["source port"] = source_port
+		signature["direction"] = direction
+		signature["destination address"] = destination
+		signature["destination port"] = destination_port
+
+		-- Parsing options into a table
+		local options_table = {}
+		for key, value in options:gmatch("(%w+):\"?([^;]+)\"?;") do
+			options_table[key] = value
+			if key == "sid" then
+				signature["sid"] = value
+			end
+		end
+		signature["options"] = options_table
+
+		-- Inserting the signature into the data table with SID as key
+		if signature["sid"] then
+			data[signature["sid"]] = signature
+		else
+			print("Error: Signature does not contain SID.")
+		end
+	end
+
+	file:close()
+
+	return data
+end
+
+
+--[[
+	************* TESTING *******************
+local filename = "rules.txt"
+local signatures = SignatureReader(filename)
+
+if signatures then
+	-- Display the parsed signatures
+	for sid, signature in pairs(signatures) do
+		print("Signature SID " .. sid .. ":")
+		for key, value in pairs(signature) do
+			if type(value) == "table" then -- multi-valued inputs
+				io.write("  " .. key .. ": {")
+				for k, v in pairs(value) do
+					io.write(k .. "=" .. v .. ",")
+				end
+				print("}")
+			else
+				print("  *" .. key .. "*: " .. value)
+			end
+		end
+	end
+else
+	print("No signatures found or error occurred while parsing signatures.")
+end
+--]]
+
+
+--------------------------------------------------------------------------------
+-- This function loads the signatures from a CSV file into Wireshark's memory.
+-- I decided to use the SNORT signature format for compatibility and so that
+-- users don't have to learn a new format. This doesn't use the ReadCSV function
+-- since simple pattern matching is not enough to properly parse the format.
+--------------------------------------------------------------------------------
+
+
+function ReadBlacklist(filename)
+	local file = io.open(path .. filename, "r") -- Open the file
+	if not file then 
+		print("Error: Unable to open file " .. filename)
+		return nil
+	end
+
+	local data = {} -- Table to store the blacklisted IP addresses
+
+	for line in file:lines() do -- Iterate over each line in the file
+		local ip, good_packets, bad_packets, matched_signatures = line:match("(%S+)%s*,%s*(%d+)%s*,%s*(%d+)%s*,%s*(.*)")
+		if ip then
+			local matched_signatures_table = {}
+			for signature_id in matched_signatures:gmatch("(%d+)%s*") do
+				table.insert(matched_signatures_table, signature_id)
+			end
+			data[ip] = {tonumber(good_packets), tonumber(bad_packets), matched_signatures_table}
+		else
+			print("Error: Unable to parse line: " .. line)
+		end
 	end
 
 	file:close() -- Close the file
-	return data -- Return the CSV data
+
+	return data -- Return the parsed blacklisted IP addresses
 end
 
 
@@ -135,12 +233,19 @@ end
 
 
 --[[
-	***** EXAMPLE USAGE *****
-tbl = ReadCSV("blacklist.csv")
-txt = ""
-for _, row in ipairs(tbl) do
-    txt = txt ..table.concat(row, "\t\t\t ") -- Print each row with values separated by comma
-	txt = txt .. "\n"
+	******************** TESTING ************************
+local filename = "blacklist.csv"
+local blacklist = ReadBlacklist(filename)
+
+-- Print the parsed blacklisted IP addresses
+for ip, data in pairs(blacklist) do
+	print("IP address:", ip)
+	print("  Good Packet Count:", data[1])
+	print("  Bad Packet Count:", data[2])
+	print("  Matched Signatures:")
+	for _, signature_id in ipairs(data[3]) do
+		print("    -", signature_id)
+	end
 end
 --]]
 
@@ -195,11 +300,35 @@ f = io.open(path .. "README.md", "r")
 io.input(f)
 content = io.read("*a") -- "*a" reads the entire file
 io.close(f)
-txt1 = ReadCSV("blacklist.csv")
-txt = ""
-for _, row in ipairs(txt1) do
-    txt = txt ..table.concat(row, "\t\t\t ") -- Print each row with values separated by comma
-	txt = txt .. "\n"
+
+signatures = SignatureReader("rules.txt") -- loading signatures
+
+-- Printing first 4 signatures
+local txt = ""
+
+if signatures then
+	-- Display the parsed signatures
+	local counter = 0
+	for sid, signature in pairs(signatures) do
+		if counter == 3 then
+			break
+		end
+		txt = txt .. "Signature SID " .. sid .. ":\n"
+		for key, value in pairs(signature) do
+			if type(value) == "table" then -- multi-valued inputs
+				txt = txt .. "  " .. key .. ": {"
+				for k, v in pairs(value) do
+					txt = txt .. k .. "=" .. v .. ","
+				end
+				txt = txt .. "}\n"
+			else
+				txt = txt .."  *" .. key .. "*: " .. value .. "\n"
+			end
+		end
+		counter = counter + 1
+	end
+else
+	txt = "No signatures found or error occurred while parsing signatures."
 end
 
 --------------------------------------------------------------------------------
@@ -213,7 +342,7 @@ if gui_enabled() then
    local splash = TextWindow.new("Hello!");
    splash:set("Hello! This is a test of file loading; if it works, the README should be printed. If this is not the case, go to Tools > Change Path To Plugin Folder")
    splash:append("\nThe current version is " .. major .. "." .. minor .. "." .. micro .. "\n")
-   splash:append(content)
+   splash:append(content .. "\n")
    splash:append(txt)
 end
 
@@ -466,7 +595,7 @@ end
 
 frame_protocols_f = Field.new("frame.protocols") -- For finding the highest protocol in the stack, e.g. "tcp" in the stack "eth:ethertype:ip:tcp"
 
-blacklisted_IPs = ReadCSV("blacklist.csv")
+blacklisted_IPs = ReadBlacklist("blacklist.csv")
 
 
 function IDS(tvb, pinfo, tree)
