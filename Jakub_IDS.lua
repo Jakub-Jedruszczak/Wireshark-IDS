@@ -44,6 +44,96 @@ function ReadCSV(filename)
 	return data -- Return the CSV data
 end
 
+
+--------------------------------------------------------------------------------
+-- This function loads the signatures from a CSV file into Wireshark's memory.
+-- I decided to use the SNORT signature format for compatibility and so that
+-- users don't have to learn a new format. This doesn't use the ReadCSV function
+-- since simple pattern matching is not enough to properly parse the format.
+--------------------------------------------------------------------------------
+
+function SignatureReader(filename)
+	local file = io.open(path .. filename, "r")
+	if not file then 
+		print("Error: Unable to open file " .. filename)
+		return nil 
+	end
+
+	local data = {}
+
+	for line in file:lines() do
+		local signature = {}
+
+		-- Extracting individual components from the signature - thank god for line breaks
+		local action, protocol, source, source_port, direction, destination, destination_port, options = 
+			line:match("(%w+)%s+(%w+)%s+(%S+)%s+(%S+)%s+([%-<>]+)%s+(%S+)%s+(%S+)%s+%((.*)%)")
+
+		if not action then
+			print("Error: Unable to parse line: " .. line)
+			file:close()
+			return nil
+		end
+
+		-- Setting up key-value pairs
+		signature["action"] = action
+		signature["protocol"] = protocol
+		signature["source address"] = source
+		signature["source port"] = source_port
+		signature["direction"] = direction
+		signature["destination address"] = destination
+		signature["destination port"] = destination_port
+
+		-- Parsing options into a table
+		local options_table = {}
+		for key, value in options:gmatch("(%w+):\"?([^;]+)\"?;") do
+			options_table[key] = value
+			if key == "sid" then
+				signature["sid"] = value
+			end
+		end
+		signature["options"] = options_table
+
+		-- Inserting the signature into the data table with SID as key
+		if signature["sid"] then
+			data[signature["sid"]] = signature
+		else
+			print("Error: Signature does not contain SID.")
+		end
+	end
+
+	file:close()
+
+	return data
+end
+
+
+--[[
+	************* TESTING *******************
+local filename = "rules.txt"
+local signatures = SignatureReader(filename)
+
+if signatures then
+	-- Display the parsed signatures
+	for sid, signature in pairs(signatures) do
+		print("Signature SID " .. sid .. ":")
+		for key, value in pairs(signature) do
+			if type(value) == "table" then -- multi-valued inputs
+				io.write("  " .. key .. ": {")
+				for k, v in pairs(value) do
+					io.write(k .. "=" .. v .. ",")
+				end
+				print("}")
+			else
+				print("  *" .. key .. "*: " .. value)
+			end
+		end
+	end
+else
+	print("No signatures found or error occurred while parsing signatures.")
+end
+--]]
+
+
 --[[
 	***** EXAMPLE USAGE *****
 tbl = ReadCSV("blacklist.csv")
@@ -53,6 +143,7 @@ for _, row in ipairs(tbl) do
 	txt = txt .. "\n"
 end
 --]]
+
 
 
 --------------------------------------------------------------------------------
@@ -457,5 +548,8 @@ end
 function SignatureCheck()
 	-- Check here for individual signatures
 	-- pinfo.match_string - "Matched string for calling subdissector from table."
+	-- Signature format (copied from SNORT for compatibility): ACTION, PROTOCOL, SOURCE_IP, SOURCE_PORT, DIRECTION, DESTINATION_IP, DESTINATION_PORT, (MSG/ OPTION)
+												   -- Example: alert      tcp      any         21          ->        10.199.12.8           any        (msg:"TCP packet is detected"; content:"USER root";)
 	-- return true/false
+
 end
