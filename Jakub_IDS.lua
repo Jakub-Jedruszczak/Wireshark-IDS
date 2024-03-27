@@ -548,6 +548,8 @@ end
 function SignatureCheck()
 	-- Check here for individual signatures
 	-- pinfo.match_string - "Matched string for calling subdissector from table."
+	-- Signature format (copied from SNORT for compatibility): ACTION, PROTOCOL, SOURCE_IP, SOURCE_PORT, DIRECTION, DESTINATION_IP, DESTINATION_PORT, (MSG/ OPTION)
+												   -- Example: alert      tcp      any         21          ->        10.199.12.8           any        (msg:"TCP packet is detected"; content:"USER root";)
 	-- return true/false
 
 end
