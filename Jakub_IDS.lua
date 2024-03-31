@@ -459,6 +459,72 @@ function sus_p.dissector(tvb,pinfo,tree)
 
 end
 
+--------------------------------------------------------------------------------
+-- An implementation of Boyer-Moore-Horspool for string searching. It uses the
+-- Bad Match heuristic to generate a table which reduces the time complexity of
+-- the search from O((length of text - length of pattern +1) * length of pattern)
+-- to O(length of text * length of pattern), but in reality it's even better
+-- since it can skip over characters and blocks of text (Wheeler, 2006). Cool!
+--------------------------------------------------------------------------------
+
+function BadMatch(pattern) -- builds the bad match table
+	local bad_match = {}
+	local pattern_length = string.len(pattern)
+	local last_char = string.sub(pattern, pattern_length, pattern_length)
+	
+	for i = 1, pattern_length - 1 do
+		local char = string.sub(pattern, i, i)
+		bad_match[char] = pattern_length - i
+	end
+	
+	-- Assign default shift value based on last character
+	bad_match[last_char] = pattern_length
+	
+	return bad_match
+end
+
+function BoyerMooreHorspool(text, pattern)
+	-- Quite proud of how simple it is honestly
+	local bad_match = BadMatch(pattern)
+	local text_length = string.len(text)
+	local pattern_length = string.len(pattern)
+	local i = pattern_length
+	
+	while i <= text_length do
+		local j = pattern_length
+		local k = i -- index (I already used 'i', so 'k' it is)
+		
+		while j > 0 and string.sub(text, k, k) == string.sub(pattern, j, j) do
+			j = j - 1 -- as far as I know Lua has no 'j ++' or 'j += 1' operators
+			k = k - 1
+		end
+		
+		if j == 0 then
+			return k + 1  -- pattern found at index k in text
+		else
+			local char = string.sub(text, i, i)
+			i = i + (bad_match[char] or pattern_length)
+		end
+	end
+	
+	return -1  -- pattern not found in text
+end
+
+--[[
+	************TESTING*****************
+local text = "this is a test string for testing the Boyer-Moore-Horspool algorithm"
+local pattern = "Horspool"
+
+local index = BoyerMooreHorspool(text, pattern)
+
+if index ~= -1 then
+	print("Pattern found at index:", index)
+else
+	print("Pattern not found in text.")
+end
+
+--]]
+
 
 --------------------------------------------------------------------------------
 -- The main function for the IDS to work; this function determines if a packet
@@ -554,7 +620,7 @@ function IDS(tvb, pinfo, tree)
 	-- Secondly checking for blacklisted IP addresses; inspired by Meng et al.'s (2014) work at reducing false positive rates
 	-- Expand blacklisted IPs with blacklisted user agents? (for HTTP(S) packets)
 	local ip_src = tostring(pinfo.src)
-	local prts = tostring(frame_protocols_f()):match("([^:]+)$") -- get the last protocol in the stack
+	local protocol = tostring(frame_protocols_f()):match("([^:]+)$") -- get the last protocol in the stack
 
 	if blacklisted_IPs[ip_src] ~= nil then
 		-- Call SignatureCheck() using the signatures that match for the IP address
