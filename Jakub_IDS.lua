@@ -620,7 +620,7 @@ function IDS(tvb, pinfo, tree)
 	-- Secondly checking for blacklisted IP addresses; inspired by Meng et al.'s (2014) work at reducing false positive rates
 	-- Expand blacklisted IPs with blacklisted user agents? (for HTTP(S) packets)
 	local ip_src = tostring(pinfo.src)
-	local prts = tostring(frame_protocols_f()):match("([^:]+)$") -- get the last protocol in the stack
+	local protocol = tostring(frame_protocols_f()):match("([^:]+)$") -- get the last protocol in the stack
 
 	if blacklisted_IPs[ip_src] ~= nil then
 		-- Call SignatureCheck() using the signatures that match for the IP address
