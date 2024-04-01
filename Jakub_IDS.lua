@@ -160,8 +160,6 @@ for ip, data in pairs(blacklist) do
 end
 --]]
 
-
-
 --------------------------------------------------------------------------------
 -- This creates the dialogue menu for changing the path to the file
 -- to be loaded. This is necessary because my way of guessing the Plugin folder
@@ -257,158 +255,10 @@ if gui_enabled() then
    splash:append(txt)
 end
 
---------------------------------------------------------------------------------
--- A simple tap/ listener used as a proof of concept and an attempt at filtering
--- packets and acting upon their data. This menu presents all packets with a TCP
--- port of 80, 433, or 8080. It shows the number of times these packets came 
--- from a source address as well as the overall count of filter-matching packets.
--- (Adapted from :https://www.wireshark.org/docs/wsdg_html_chunked/wslua_tap_example.html)
---------------------------------------------------------------------------------
-
-local frame_prots = Field.new("frame.protocols")
-
-local function counting_tap()
-	-- Declare the window we will use
-	local tw = TextWindow.new("Address Counter")
-
-	-- This will contain a hash of counters of appearances of a certain address
-	local ips = {}
-    local counter = 0 -- total packet count
-
-	-- this is our tap
-	local tap = Listener.new(nil, nil);
-
-	local function remove()
-		-- this way we remove the listener that otherwise will remain running indefinitely
-		tap:remove();
-	end
-
-	-- we tell the window to call the remove() function when closed
-	tw:set_atclose(remove)
-
-	-- this function will be called once for each packet
-	function tap.packet(pinfo, tvb)
-        local key = tostring(pinfo.src)
-		local prts = tostring(frame_prots()):match("([^:]+)$") -- get the last protocol in the stack
-		local p = tostring(frame_prots())
-    
-        if ips[key] == nil then
-            ips[key] = {0, tostring(pinfo.src_port), tostring(pinfo.dst_port), prts, p}  -- Initialize with default values if the key doesn't exist
-        end
-
-        local count = ips[key][1]
-        local s_port = ips[key][2]
-        local d_port = ips[key][3]
-		local prots = ips[key][4]
-		local p = ips[key][5]
-
-        ips[key] = {count + 1, s_port, d_port, prots, p}  -- Update the values
-        counter = counter + 1
-	end
-
-	-- this function will be called once every few seconds to update our window
-	function tap.draw(t)
-		tw:clear()
-        tw:append("Source IP\t\tCount\tSource Port \tDestination Port \t(Matching Packets:" .. counter ..")\n")
-		for key, values in pairs(ips) do
-			local s = key .. "\t"
-			if values[1] ~= nil then s = s..values[1] .. "\t" end
-			if values[2] ~= nil then s = s..values[2] .. "\t" end
-			if values[3] ~= nil then s = s..values[3] .. "\t" end
-			if values[4] ~= nil then s = s..values[4] .. "\t" end
-			if values[5] ~= nil then s = s..values[5] .. "\t" end
-			s = s .. "\n"
-
-			tw:append(s)
-		end
-	end
-
-	-- this function will be called whenever a reset is needed
-	-- e.g. when reloading the capture file
-	function tap.reset()
-		tw:clear()
-		ips = {}
-        counter = 0
-	end
-
-	-- Ensure that all existing packets are processed.
-	retap_packets()
-end
-
--- using this function we register our function
--- to be called when the user selects the Tools->Test->Packets menu
-register_menu("Test/Packets", counting_tap, MENU_TOOLS_UNSORTED)
 
 --------------------------------------------------------------------------------
--- A simple tap to test packet dissection. This particular one extracts the URL
--- of packets from HTTP(s) traffic. 
---------------------------------------------------------------------------------
-
--- Creating a field reader before the listener is initalised
-local uri = Field.new("http.request.uri")
-local host = Field.new("http.host")
-
-local function http_tap()
-	-- Declare the window we will use
-	local tw = TextWindow.new("Address Counter")
-
-	-- This will contain a hash of counters of appearances of a certain address
-	local websites = {}
-    local counter = 0
-
-	-- this is our tap
-	local tap = Listener.new(nil, "http.request");
-
-	local function remove()
-		-- this way we remove the listener that otherwise will remain running indefinitely
-		tap:remove();
-	end
-
-	-- we tell the window to call the remove() function when closed
-	tw:set_atclose(remove)
-
-	-- this function will be called once for each packet
-	function tap.packet(pinfo, tvb)
-        local http_data = tvb:range():string()
-
-        local uri = tostring(uri())
-        local host = tostring(host())
-        local ip = tostring(pinfo.src)
-		local prts = tostring(frame_prots())
-        websites[counter] = {ip, host, uri,prts}
-        counter = counter + 1
-	end
-
-	-- this function will be called once every few seconds to update our window
-	function tap.draw(t)
-		tw:clear()
-        tw:append("Source IP\t\tHost\t\tWebsite\n")
-		for key, values in pairs(websites) do
-			tw:append(values[1].. "\t" .. values[2] .."\t" .. values[3].. "\t" .. values[4] .. "\n");
-		end
-	end
-
-	-- this function will be called whenever a reset is needed
-	-- e.g. when reloading the capture file
-	function tap.reset()
-		tw:clear()
-		--websites = {}
-	end
-
-	-- Ensure that all existing packets are processed.
-	retap_packets()
-end
-
--- using this function we register our function
--- to be called when the user selects the Tools->Test->Packets menu
-register_menu("Test/HTTP", http_tap, MENU_TOOLS_UNSORTED)
-
-
---------------------------------------------------------------------------------
--- An attempt to add another column to the main view, showing the URI of HTTP 
--- packets. This uses a post-dissector to modify the view as taps can't modify
--- the dissected packets. This is a dummy post-dissector that "checks" if a
--- packet is malicious by checking if the source port number is odd or even.
+-- The main post-dissector of the plugin; this runs for every packet in order to
+-- analyse the packets.
 
 -- (Adapted from https://wiki.wireshark.org/Lua/Examples/PostDissector)
 -- (partially)
@@ -458,6 +308,72 @@ function sus_p.dissector(tvb,pinfo,tree)
 	tree:set_generated()
 
 end
+
+--------------------------------------------------------------------------------
+-- An implementation of Boyer-Moore-Horspool for string searching. It uses the
+-- Bad Match heuristic to generate a table which reduces the time complexity of
+-- the search from O((length of text - length of pattern +1) * length of pattern)
+-- to O(length of text * length of pattern), but in reality it's even better
+-- since it can skip over characters and blocks of text (Wheeler, 2006). Cool!
+--------------------------------------------------------------------------------
+
+function BadMatch(pattern) -- builds the bad match table
+	local bad_match = {}
+	local pattern_length = string.len(pattern)
+	local last_char = string.sub(pattern, pattern_length, pattern_length)
+	
+	for i = 1, pattern_length - 1 do
+		local char = string.sub(pattern, i, i)
+		bad_match[char] = pattern_length - i
+	end
+	
+	-- Assign default shift value based on last character
+	bad_match[last_char] = pattern_length
+	
+	return bad_match
+end
+
+function BoyerMooreHorspool(text, pattern)
+	-- Quite proud of how simple it is honestly
+	local bad_match = BadMatch(pattern)
+	local text_length = string.len(text)
+	local pattern_length = string.len(pattern)
+	local i = pattern_length
+	
+	while i <= text_length do
+		local j = pattern_length
+		local k = i -- index (I already used 'i', so 'k' it is)
+		
+		while j > 0 and string.sub(text, k, k) == string.sub(pattern, j, j) do
+			j = j - 1 -- as far as I know Lua has no 'j ++' or 'j += 1' operators
+			k = k - 1
+		end
+		
+		if j == 0 then
+			return k + 1  -- pattern found at index k in text
+		else
+			local char = string.sub(text, i, i)
+			i = i + (bad_match[char] or pattern_length) -- neat little line
+		end
+	end
+	
+	return -1  -- pattern not found in text
+end
+
+--[[
+	************TESTING*****************
+local text = "this is a test string for testing the Boyer-Moore-Horspool algorithm"
+local pattern = "Horspool"
+
+local index = BoyerMooreHorspool(text, pattern)
+
+if index ~= -1 then
+	print("Pattern found at index:", index)
+else
+	print("Pattern not found in text.")
+end
+
+--]]
 
 
 --------------------------------------------------------------------------------
@@ -554,18 +470,28 @@ function IDS(tvb, pinfo, tree)
 	-- Secondly checking for blacklisted IP addresses; inspired by Meng et al.'s (2014) work at reducing false positive rates
 	-- Expand blacklisted IPs with blacklisted user agents? (for HTTP(S) packets)
 	local ip_src = tostring(pinfo.src)
-	local prts = tostring(frame_protocols_f()):match("([^:]+)$") -- get the last protocol in the stack
+	local protocol = tostring(frame_protocols_f()):match("([^:]+)$") -- get the last protocol in the stack
 
 	if blacklisted_IPs[ip_src] ~= nil then
 		-- Call SignatureCheck() using the signatures that match for the IP address
 			-- If any of the signatures match, return "suspicious" and increment the number of bad packets; send
 				-- Also log the alert
 			-- If the packet doesn't match any signatures, send it to the rest of the signatures
-	else
+		if MultiSigCheck(tvb, pinfo, tree, blacklisted_IPs[ip_src]) == 1 then
+			-- A signature has matched
+			return 1 -- ?
+		else MultiSigCheck(tvb, pinfo, tree, ["ALL"]) == 1 then
+			-- A signature has matched
+			return 1 -- ?
+
+	else -- if the source IP is not in the blacklist
+		if MultiSigCheck(tvb, pinfo, ["ALL"])
 		-- Call SignatureCheck() using all the signatures
 			-- If any of the signatures match, return "suspicious" and add the source IP to the blacklist and add the signature to the blacklist too
 				-- Also log the alert
 			-- If the packet doesn't match any signatures, its benign
+			-- A signature has matched
+			return 1 -- ?
 	end
 end
 
@@ -578,18 +504,40 @@ function FindProto()
 
 end
 
-function MultiSigCheck()
+function MultiSigCheck(tvb, pinfo, tree, signatures)
 	-- Check here for multiple signatures
 	-- Multiple calls to SignatureCheck()
 	-- (Basically a for loop going over all the signatures passed in through the args)
 	-- Return signatures matched (or better to do it directly here?), true/false
+	if signatures[1] == "ALL" then
+		-- do all the signatures
+	else
+		-- do the signatures in the signatures arg
+		for k, v in pairs(signatures) do
+			-- main loop
+		end
+	end
 end
 
-function SignatureCheck()
-	-- Check here for individual signatures
+function SignatureCheck(tvb, pinfo, tree, sid)
+	-- Check here for individual signatures -- Boyer-Moore-Horspool
 	-- pinfo.match_string - "Matched string for calling subdissector from table."
 	-- Signature format (copied from SNORT for compatibility): ACTION, PROTOCOL, SOURCE_IP, SOURCE_PORT, DIRECTION, DESTINATION_IP, DESTINATION_PORT, (MSG/ OPTION)
 												   -- Example: alert      tcp      any         21          ->        10.199.12.8           any        (msg:"TCP packet is detected"; content:"USER root";)
 	-- return true/false
+	local signature = signatures[sid]
+	-- Implementation of Figure 4.4
+	if string.find(frame_protocols_f(), signature["protocol"]) == nil then
+		return -1
+	end
+	if tostring(pinfo.src_port) ~= signature["source port"] or tostring(pinfo.dst_port) ~= signature["destination port"] then
+		return -1
+	end
 
+	if signature["options"]["content"] ~= nil then
+		-- content matching here
+	end
+
+	-- this means the packet matches the signature
+	-- log the packet
 end
