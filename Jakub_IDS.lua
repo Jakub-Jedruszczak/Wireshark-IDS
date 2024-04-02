@@ -495,14 +495,6 @@ function IDS(tvb, pinfo, tree)
 	end
 end
 
-function FindProto()
-	-- Function to find the protocol that the packet uses so that it may be analysed using the signatures made for that proto
-	-- pinfo.curr_proto shows proto that is being analysed
-	-- pinfo.p2p_dir shows direction of packet (incoming/outgoing)
-	-- Return signature sets to be used
-	local prot = frame_protocols_f()
-
-end
 
 function MultiSigCheck(tvb, pinfo, tree, signatures)
 	-- Check here for multiple signatures
