@@ -494,13 +494,18 @@ function IDS(tvb, pinfo, tree)
 
 
 	else -- if the source IP is not in the blacklist
-		if MultiSigCheck(tvb, pinfo, ["ALL"])
+		local result = MultiSigCheck(tvb, pinfo, tree, {"ALL"})
+		if result[1] == 1 then
 		-- Call SignatureCheck() using all the signatures
 			-- If any of the signatures match, return "suspicious" and add the source IP to the blacklist and add the signature to the blacklist too
 				-- Also log the alert
 			-- If the packet doesn't match any signatures, its benign
 			-- A signature has matched
-			return 1 -- ?
+			return {1, result[2]} -- ?
+		else
+			-- No signatures have matched
+			return {-1}
+		end
 	end
 end
 
