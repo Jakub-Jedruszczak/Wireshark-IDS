@@ -1,6 +1,21 @@
 -- Jakub_IDS.lua
 --------------------------------------------------------------------------------
 --[[
+	
+_____                                             _____ 
+( ___ )                                           ( ___ )
+ |   |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|   | 
+ |   |  ,-_/     .       .     ,-_/ .-,--.  .---.  |   | 
+ |   |  '  | ,-. | , . . |-.   '  | ' |   \ \___   |   | 
+ |   |     | ,-| |<  | | | |   .^ | , |   /     \  |   | 
+ |   |     | `-^ ' ` `-^ ^-'   `--' `-^--'  `---'  |   | 
+ |   |  /` |                                       |   | 
+ |   |  `--'                                       |   | 
+ |___|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|___| 
+(_____)                                           (_____)
+
+
+
     This is an IDS created to work with Wireshark using various open source
     signature databases. This plugin is intended to work with offline network
     traffic captures, but it may be adjusted to work with real-time inputs.
@@ -212,47 +227,37 @@ io.close(f)
 
 signatures = SignatureReader("rules.txt") -- loading signatures
 
--- Printing first 4 signatures
-local txt = ""
-
-if signatures then
-	-- Display the parsed signatures
-	local counter = 0
-	for sid, signature in pairs(signatures) do
-		if counter == 3 then
-			break
-		end
-		txt = txt .. "Signature SID " .. sid .. ":\n"
-		for key, value in pairs(signature) do
-			if type(value) == "table" then -- multi-valued inputs
-				txt = txt .. "  " .. key .. ": {"
-				for k, v in pairs(value) do
-					txt = txt .. k .. "=" .. v .. ","
-				end
-				txt = txt .. "}\n"
-			else
-				txt = txt .."  *" .. key .. "*: " .. value .. "\n"
-			end
-		end
-		counter = counter + 1
-	end
-else
-	txt = "No signatures found or error occurred while parsing signatures."
-end
-
 --------------------------------------------------------------------------------
 -- Opens 'README.md' on loading Wireshark to confirm that the file loading
 -- functionality works correctly. This entire project relies on loading external
 -- files, so this is pretty important!
 --------------------------------------------------------------------------------
 
+local graphic = [[
+  _____                                                                                                                  _____ 
+ ( ___ )                                                                                                                 ( ___ )
+ |       |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|       | 
+ |       |      ,-_/                .                  .              ,-_/     .-,--.       .---.                      |       | 
+ |       |        '  |      ,-.      |   ,     .    .     |--.        '      |     '   |   \     \___                    |        | 
+ |       |           |     ,--|      |<      |    |    |     |       .^   |    ,    |   /            \                 |        | 
+ |       |           |     `-^     '   `      `--^   ^--'       `---'    `-^--'         `---'                  |        | 
+ |       |        /` |                                                                                                    |        | 
+ |       |        `--'                                                                                                    |        | 
+ |_____|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|_____|
+ (_____)                                                                                                                (_____)
+
+]]
+
+
+
+
 -- Notify the user that the menu was created
 if gui_enabled() then
    local splash = TextWindow.new("Hello!");
-   splash:set("Hello! This is a test of file loading; if it works, the README should be printed. If this is not the case, go to Tools > Change Path To Plugin Folder")
+   splash:set(graphic)
+   splash:append("Hello! This is a test of file loading; if it works, the README should be printed. If this is not the case, go to Tools > Change Path To Plugin Folder")
    splash:append("\nThe current version is " .. major .. "." .. minor .. "." .. micro .. "\n")
    splash:append(content .. "\n")
-   splash:append(txt)
 end
 
 
