@@ -599,4 +599,28 @@ function SignatureCheck(tvb, pinfo, tree, sid)
 end
 
 
+
+--------------------------------------------------------------------------------
+-- These functions create menus in the Tools menu to browse the IP blacklist
+-- and the rule set. This helps with debugging both for myself and for users of
+-- the plugin.
+--------------------------------------------------------------------------------
+
+
+local function ShowBlacklist()
+	local tw = TextWindow.new("IP Blacklist")
+	local text = "" -- output
+	for ip, data in pairs(blacklisted_IPs) do
+		text = text .. "IP address:" .. ip .. "\n"
+		text = text .. "  Good Packet Count:" .. data[1] .."\n"
+		text = text .. "  Bad Packet Count:" .. data[2] .. "\n"
+		text = text .. "  Matched Signatures: \n"
+		for _, sid in ipairs(data[3]) do
+			text = text .. "    - ".. sid .. "\n"
+		end
+	end
+	tw:append(text)
 end
+
+register_menu("IP Blacklist", ShowBlacklist, MENU_TOOLS_UNSORTED)
+
