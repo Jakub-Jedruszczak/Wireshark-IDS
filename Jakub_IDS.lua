@@ -503,12 +503,35 @@ function MultiSigCheck(tvb, pinfo, tree, sigs)
 	-- Return signatures matched (or better to do it directly here?), true/false
 	if sigs[#sigs] == "ALL" then
 		-- do all the signatures
-	else
-		-- do the signatures in the signatures arg
-		for k, v in pairs(signatures) do
-			-- main loop
+		for sid, _ in pairs(signatures) do
+			local result = SignatureCheck(tvb, pinfo, tree, sid)
+			if result[1] == 1 then
+				return {1, result[2]}
+			end
 		end
+	else
+		for sid, _ in pairs(signatures) do
+			local result = SignatureCheck(tvb, pinfo, tree, sid)
+			if result[1] == 1 then
+				return {1, result[2]}
+			end
+		end
+		--[[
+		-- do the signatures in the signatures arg
+		for k, sid in pairs(sigs) do
+			local result = SignatureCheck(tvb, pinfo, tree, sid)
+			if result[1] == 1 then
+				return {1, sid}
+			end
+
+		end
+		--]]
 	end
+	-- No signature matched, increase good packet count by 1
+	if blacklisted_IPs[tostring(pinfo.src)] ~= nil then
+		blacklisted_IPs[tostring(pinfo.src)] = {blacklisted_IPs[tostring(pinfo.src)][1] + 1, blacklisted_IPs[tostring(pinfo.src)][2], blacklisted_IPs[tostring(pinfo.src)][3]}
+	end
+	return {-1, "h"}
 end
 
 function SignatureCheck(tvb, pinfo, tree, sid)
