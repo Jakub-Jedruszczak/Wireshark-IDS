@@ -534,6 +534,24 @@ function MultiSigCheck(tvb, pinfo, tree, sigs)
 	return {-1, "h"}
 end
 
+
+
+
+
+
+-- TODO: MAKE THE SIG CHECK FUNCTIONS RETURN THE SIDS OF MATCHED SIGNATURES
+-- ALL PACKETS ARE MARKED AS SUSPICIOUS
+-- ADD IP TO BLACKLIST/ INCREMENT VALUE
+
+
+
+
+
+
+
+
+
+
 function SignatureCheck(tvb, pinfo, tree, sid)
 	-- Check here for individual signatures -- Boyer-Moore-Horspool
 	-- pinfo.match_string - "Matched string for calling subdissector from table."
