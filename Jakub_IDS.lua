@@ -574,17 +574,29 @@ function SignatureCheck(tvb, pinfo, tree, sid)
 	-- return true/false
 	local signature = signatures[sid]
 	-- Implementation of Figure 4.4
-	if string.find(frame_protocols_f(), signature["protocol"]) == nil then
-		return -1
+	if string.find(tostring(frame_protocols_f()), signature["protocol"]) == nil then
+		return {-1}
 	end
-	if tostring(pinfo.src_port) ~= signature["source port"] or tostring(pinfo.dst_port) ~= signature["destination port"] then
-		return -1
-	end
-
+	--if (tostring(pinfo.src_port) ~= signature["source port"] and tostring(pinfo.src_port) ~= "any") or (tostring(pinfo.dst_port) ~= signature["destination port"] and tostring(pinfo.dst_port) ~= "any") then
+	--	return {-1}
+	--end
 	if signature["options"]["content"] ~= nil then
 		-- content matching here
+		-- Boyer-Moore-Horspool since it is a single signature search
+		local first_145_bytes = tostring(tvb:range(0, math.min(tvb:len(), 145)):bytes()) -- Wheeler (2006) says that only 145 bytes are needed to check 95% of SNORT rules
+		if BoyerMooreHorspool(first_145_bytes, signature["options"]["content"]) == -1 then
+			return {-1}
+		end
 	end
-
 	-- this means the packet matches the signature
 	-- log the packet
+	if blacklisted_IPs[tostring(pinfo.src)] ~= nil then
+		blacklisted_IPs[tostring(pinfo.src)] = {blacklisted_IPs[tostring(pinfo.src)][1], blacklisted_IPs[tostring(pinfo.src)][2] + 1, blacklisted_IPs[tostring(pinfo.src)][3]}
+	else
+		blacklisted_IPs[tostring(pinfo.src)] = {0, 1, {sid}}
+	end
+	return {1, sid}
+end
+
+
 end
