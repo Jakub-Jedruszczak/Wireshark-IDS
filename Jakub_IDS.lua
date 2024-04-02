@@ -289,16 +289,18 @@ function sus_p.dissector(tvb,pinfo,tree)
 
 	local sp = pinfo.src_port
 	local reason = ""
-	is_sus = 0
+	local is_sus = 0
 
-	if sp % 2 == 0 then
+	local result = IDS(tvb, pinfo, tree)
+
+	if result[1] == 1 then -- 1 means it matched
 		is_sus = "Suspicious"
-		reason = "How odd! This packet's source port number is even."
+		reason = "The packet triggered rules SID: " .. result[2]
 	else
 		is_sus = "Benign"
-		reason = "Nothing wrong with it."
+		reason = "The packet did not trigger any rules."
 	end
-	--local score = IDS(tvb, pinfo, tree)
+
 	if pinfo.in_error_pkt then -- return value for error packets
 		reason = "ERROR PACKET"
 		is_sus = "ERROR"
@@ -308,7 +310,6 @@ function sus_p.dissector(tvb,pinfo,tree)
 	-- (https://osqa-ask.wireshark.org/questions/9511/is-it-possible-to-set-the-coloring-of-a-packet-from-a-dissector/)
 	tree:add(sus_field, is_sus)
 	tree:add_le(sus_reason_field, reason)
-	tree:add_le(sus_reason_field, "The identified protocol was: ".. tostring(frame_prots()):match("([^:]+)$") .. "   (" .. tostring(frame_prots()) .. ")") -- adding the identified protocol
 	--tree:add(sus_reason_field, reason)
 	tree:set_generated()
 
@@ -475,54 +476,100 @@ function IDS(tvb, pinfo, tree)
 	-- Secondly checking for blacklisted IP addresses; inspired by Meng et al.'s (2014) work at reducing false positive rates
 	-- Expand blacklisted IPs with blacklisted user agents? (for HTTP(S) packets)
 	local ip_src = tostring(pinfo.src)
-	local protocol = tostring(frame_protocols_f()):match("([^:]+)$") -- get the last protocol in the stack
+	local result = {}
 
 	if blacklisted_IPs[ip_src] ~= nil then
 		-- Call SignatureCheck() using the signatures that match for the IP address
 			-- If any of the signatures match, return "suspicious" and increment the number of bad packets; send
 				-- Also log the alert
 			-- If the packet doesn't match any signatures, send it to the rest of the signatures
-		if MultiSigCheck(tvb, pinfo, tree, blacklisted_IPs[ip_src]) == 1 then
+		local result = MultiSigCheck(tvb, pinfo, tree, blacklisted_IPs[ip_src])
+		if result[1] == 1 then
 			-- A signature has matched
-			return 1 -- ?
-		else MultiSigCheck(tvb, pinfo, tree, ["ALL"]) == 1 then
+			return {1, result[2]}
+		end
+		result = MultiSigCheck(tvb, pinfo, tree, {"ALL"})
+		if  result[1] == 1 then
 			-- A signature has matched
-			return 1 -- ?
+			return {1, result [2]}
+		else
+			-- No signatures have matched
+			return {-1}
+		end
+
 
 	else -- if the source IP is not in the blacklist
-		if MultiSigCheck(tvb, pinfo, ["ALL"])
+		local result = MultiSigCheck(tvb, pinfo, tree, {"ALL"})
+		if result[1] == 1 then
 		-- Call SignatureCheck() using all the signatures
 			-- If any of the signatures match, return "suspicious" and add the source IP to the blacklist and add the signature to the blacklist too
 				-- Also log the alert
 			-- If the packet doesn't match any signatures, its benign
 			-- A signature has matched
-			return 1 -- ?
+			return {1, result[2]} -- ?
+		else
+			-- No signatures have matched
+			return {-1}
+		end
 	end
 end
 
-function FindProto()
-	-- Function to find the protocol that the packet uses so that it may be analysed using the signatures made for that proto
-	-- pinfo.curr_proto shows proto that is being analysed
-	-- pinfo.p2p_dir shows direction of packet (incoming/outgoing)
-	-- Return signature sets to be used
-	local prot = frame_protocols_f()
 
-end
-
-function MultiSigCheck(tvb, pinfo, tree, signatures)
+function MultiSigCheck(tvb, pinfo, tree, sigs)
 	-- Check here for multiple signatures
 	-- Multiple calls to SignatureCheck()
 	-- (Basically a for loop going over all the signatures passed in through the args)
 	-- Return signatures matched (or better to do it directly here?), true/false
-	if signatures[1] == "ALL" then
+	if sigs[#sigs] == "ALL" then
 		-- do all the signatures
-	else
-		-- do the signatures in the signatures arg
-		for k, v in pairs(signatures) do
-			-- main loop
+		for sid, _ in pairs(signatures) do
+			local result = SignatureCheck(tvb, pinfo, tree, sid)
+			if result[1] == 1 then
+				return {1, result[2]}
+			end
 		end
+	else
+		for sid, _ in pairs(signatures) do
+			local result = SignatureCheck(tvb, pinfo, tree, sid)
+			if result[1] == 1 then
+				return {1, result[2]}
+			end
+		end
+		--[[
+		-- do the signatures in the signatures arg
+		for k, sid in pairs(sigs) do
+			local result = SignatureCheck(tvb, pinfo, tree, sid)
+			if result[1] == 1 then
+				return {1, sid}
+			end
+
+		end
+		--]]
 	end
+	-- No signature matched, increase good packet count by 1
+	if blacklisted_IPs[tostring(pinfo.src)] ~= nil then
+		blacklisted_IPs[tostring(pinfo.src)] = {blacklisted_IPs[tostring(pinfo.src)][1] + 1, blacklisted_IPs[tostring(pinfo.src)][2], blacklisted_IPs[tostring(pinfo.src)][3]}
+	end
+	return {-1, "h"}
 end
+
+
+
+
+
+
+-- TODO: MAKE THE SIG CHECK FUNCTIONS RETURN THE SIDS OF MATCHED SIGNATURES
+-- ALL PACKETS ARE MARKED AS SUSPICIOUS
+-- ADD IP TO BLACKLIST/ INCREMENT VALUE
+
+
+
+
+
+
+
+
+
 
 function SignatureCheck(tvb, pinfo, tree, sid)
 	-- Check here for individual signatures -- Boyer-Moore-Horspool
@@ -532,17 +579,88 @@ function SignatureCheck(tvb, pinfo, tree, sid)
 	-- return true/false
 	local signature = signatures[sid]
 	-- Implementation of Figure 4.4
-	if string.find(frame_protocols_f(), signature["protocol"]) == nil then
-		return -1
+	if string.find(tostring(frame_protocols_f()), signature["protocol"]) == nil then
+		return {-1}
 	end
-	if tostring(pinfo.src_port) ~= signature["source port"] or tostring(pinfo.dst_port) ~= signature["destination port"] then
-		return -1
-	end
-
+	--if (tostring(pinfo.src_port) ~= signature["source port"] and tostring(pinfo.src_port) ~= "any") or (tostring(pinfo.dst_port) ~= signature["destination port"] and tostring(pinfo.dst_port) ~= "any") then
+	--	return {-1}
+	--end
 	if signature["options"]["content"] ~= nil then
 		-- content matching here
+		-- Boyer-Moore-Horspool since it is a single signature search
+		local first_145_bytes = tostring(tvb:range(0, math.min(tvb:len(), 145)):bytes()) -- Wheeler (2006) says that only 145 bytes are needed to check 95% of SNORT rules
+		if BoyerMooreHorspool(first_145_bytes, signature["options"]["content"]) == -1 then
+			return {-1}
+		end
 	end
-
 	-- this means the packet matches the signature
 	-- log the packet
+	if blacklisted_IPs[tostring(pinfo.src)] ~= nil then
+		blacklisted_IPs[tostring(pinfo.src)] = {blacklisted_IPs[tostring(pinfo.src)][1], blacklisted_IPs[tostring(pinfo.src)][2] + 1, blacklisted_IPs[tostring(pinfo.src)][3]}
+	else
+		blacklisted_IPs[tostring(pinfo.src)] = {0, 1, {sid}}
+	end
+	return {1, sid}
 end
+
+
+
+--------------------------------------------------------------------------------
+-- These functions create menus in the Tools menu to browse the IP blacklist
+-- and the rule set. This helps with debugging both for myself and for users of
+-- the plugin.
+--------------------------------------------------------------------------------
+
+
+local function ShowBlacklist()
+	local tw = TextWindow.new("IP Blacklist")
+	local text = "" -- output
+	for ip, data in pairs(blacklisted_IPs) do
+		text = text .. "IP address:" .. ip .. "\n"
+		text = text .. "  Good Packet Count:" .. data[1] .."\n"
+		text = text .. "  Bad Packet Count:" .. data[2] .. "\n"
+		text = text .. "  Matched Signatures: \n"
+		for _, sid in ipairs(data[3]) do
+			text = text .. "    - ".. sid .. "\n"
+		end
+	end
+	tw:append(text)
+end
+
+register_menu("IP Blacklist", ShowBlacklist, MENU_TOOLS_UNSORTED)
+
+
+local function ShowSignatures()
+	local tw = TextWindow.new("Signatures")
+	local txt = ""
+	if signatures then
+		-- Display the parsed signatures
+		for sid, signature in pairs(signatures) do
+			txt = txt .. "Signature SID " .. sid .. ":\n"
+			for key, value in pairs(signature) do
+				if type(value) == "table" then -- multi-valued inputs
+					txt = txt .. "  " .. key .. ": {"
+					for k, v in pairs(value) do
+						txt = txt .. k .. "=" .. v .. ","
+					end
+					txt = txt .. "}\n"
+				else
+					txt = txt .."  *" .. key .. "*: " .. value .. "\n"
+				end
+			end
+		end
+	else
+		txt = "No signatures found or error occurred while parsing signatures."
+	end
+	tw:append(txt)
+
+	function remove() -- called when the menu is closed
+		txt = ""
+		tw:clear()
+	end
+
+	tw:set_atclose(remove)
+
+end
+
+register_menu("Signatures", ShowSignatures, MENU_TOOLS_UNSORTED)
