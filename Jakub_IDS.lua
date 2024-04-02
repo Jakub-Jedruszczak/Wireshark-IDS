@@ -624,3 +624,38 @@ end
 
 register_menu("IP Blacklist", ShowBlacklist, MENU_TOOLS_UNSORTED)
 
+
+local function ShowSignatures()
+	local tw = TextWindow.new("Signatures")
+	local txt = ""
+	if signatures then
+		-- Display the parsed signatures
+		for sid, signature in pairs(signatures) do
+			txt = txt .. "Signature SID " .. sid .. ":\n"
+			for key, value in pairs(signature) do
+				if type(value) == "table" then -- multi-valued inputs
+					txt = txt .. "  " .. key .. ": {"
+					for k, v in pairs(value) do
+						txt = txt .. k .. "=" .. v .. ","
+					end
+					txt = txt .. "}\n"
+				else
+					txt = txt .."  *" .. key .. "*: " .. value .. "\n"
+				end
+			end
+		end
+	else
+		txt = "No signatures found or error occurred while parsing signatures."
+	end
+	tw:append(txt)
+
+	function remove() -- called when the menu is closed
+		txt = ""
+		tw:clear()
+	end
+
+	tw:set_atclose(remove)
+
+end
+
+register_menu("Signatures", ShowSignatures, MENU_TOOLS_UNSORTED)
