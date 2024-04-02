@@ -471,19 +471,27 @@ function IDS(tvb, pinfo, tree)
 	-- Secondly checking for blacklisted IP addresses; inspired by Meng et al.'s (2014) work at reducing false positive rates
 	-- Expand blacklisted IPs with blacklisted user agents? (for HTTP(S) packets)
 	local ip_src = tostring(pinfo.src)
-	local protocol = tostring(frame_protocols_f()):match("([^:]+)$") -- get the last protocol in the stack
+	local result = {}
 
 	if blacklisted_IPs[ip_src] ~= nil then
 		-- Call SignatureCheck() using the signatures that match for the IP address
 			-- If any of the signatures match, return "suspicious" and increment the number of bad packets; send
 				-- Also log the alert
 			-- If the packet doesn't match any signatures, send it to the rest of the signatures
-		if MultiSigCheck(tvb, pinfo, tree, blacklisted_IPs[ip_src]) == 1 then
+		local result = MultiSigCheck(tvb, pinfo, tree, blacklisted_IPs[ip_src])
+		if result[1] == 1 then
 			-- A signature has matched
-			return 1 -- ?
-		else MultiSigCheck(tvb, pinfo, tree, ["ALL"]) == 1 then
+			return {1, result[2]}
+		end
+		result = MultiSigCheck(tvb, pinfo, tree, {"ALL"})
+		if  result[1] == 1 then
 			-- A signature has matched
-			return 1 -- ?
+			return {1, result [2]}
+		else
+			-- No signatures have matched
+			return {-1}
+		end
+
 
 	else -- if the source IP is not in the blacklist
 		if MultiSigCheck(tvb, pinfo, ["ALL"])
