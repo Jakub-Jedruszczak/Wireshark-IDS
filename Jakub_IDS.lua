@@ -284,16 +284,18 @@ function sus_p.dissector(tvb,pinfo,tree)
 
 	local sp = pinfo.src_port
 	local reason = ""
-	is_sus = 0
+	local is_sus = 0
 
-	if sp % 2 == 0 then
+	local result = IDS(tvb, pinfo, tree)
+
+	if result[1] == 1 then -- 1 means it matched
 		is_sus = "Suspicious"
-		reason = "How odd! This packet's source port number is even."
+		reason = "The packet triggered rules SID: " .. result[2]
 	else
 		is_sus = "Benign"
-		reason = "Nothing wrong with it."
+		reason = "The packet did not trigger any rules."
 	end
-	--local score = IDS(tvb, pinfo, tree)
+
 	if pinfo.in_error_pkt then -- return value for error packets
 		reason = "ERROR PACKET"
 		is_sus = "ERROR"
