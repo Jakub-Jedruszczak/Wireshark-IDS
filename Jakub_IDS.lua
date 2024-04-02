@@ -496,12 +496,12 @@ function IDS(tvb, pinfo, tree)
 end
 
 
-function MultiSigCheck(tvb, pinfo, tree, signatures)
+function MultiSigCheck(tvb, pinfo, tree, sigs)
 	-- Check here for multiple signatures
 	-- Multiple calls to SignatureCheck()
 	-- (Basically a for loop going over all the signatures passed in through the args)
 	-- Return signatures matched (or better to do it directly here?), true/false
-	if signatures[1] == "ALL" then
+	if sigs[#sigs] == "ALL" then
 		-- do all the signatures
 	else
 		-- do the signatures in the signatures arg
