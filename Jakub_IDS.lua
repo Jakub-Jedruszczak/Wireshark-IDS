@@ -350,6 +350,9 @@ function sus_p.dissector(tvb,pinfo,tree)
 	else
 		is_sus = "Benign"
 		reason = "The packet did not trigger any rules."
+		if result[2] ~= nil then
+			reason = reason .. "\n()" .. result[2] .. ")"
+		end
 	end
 
 	if pinfo.in_error_pkt then -- return value for error packets
@@ -363,7 +366,6 @@ function sus_p.dissector(tvb,pinfo,tree)
 	tree:add_le(sus_reason_field, reason)
 	--tree:add(sus_reason_field, reason)
 	tree:set_generated()
-
 end
 
 --------------------------------------------------------------------------------
@@ -690,13 +692,13 @@ local function ShowSignatures()
 			txt = txt .. "Signature SID " .. sid .. ":\n"
 			for key, value in pairs(signature) do
 				if type(value) == "table" then -- multi-valued inputs
-					txt = txt .. "  " .. key .. ": {"
+					txt = txt .. "  " .. key .. ": {\n"
 					for k, v in pairs(value) do
-						txt = txt .. k .. "=" .. v .. ","
+						txt = txt .. "          " .. k .. "=" .. v .. "\n"
 					end
-					txt = txt .. "}\n"
+					txt = txt .. "  }\n"
 				else
-					txt = txt .."  *" .. key .. "*: " .. value .. "\n"
+					txt = txt .."  " .. key .. ": " .. value .. "\n"
 				end
 			end
 		end
