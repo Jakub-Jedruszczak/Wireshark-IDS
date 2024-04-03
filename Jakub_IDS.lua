@@ -74,6 +74,9 @@ function SignatureReader(filename)
 		-- Parsing options into a table
 		local options_table = {}
 		for key, value in options:gmatch("(%w+):\"?([^;]+)\"?;") do
+			if key == "content" then -- normalising content matching into bytes
+				value = ToBytes(value)
+			end
 			options_table[key] = value
 			if key == "sid" then
 				signature["sid"] = value
@@ -120,6 +123,58 @@ else
 	print("No signatures found or error occurred while parsing signatures.")
 end
 --]]
+
+
+
+
+
+function ToBytes(content)
+	content = content:sub(0, content:find('"')-1) -- only the part in quotes incasse it was parsed wrong earlier
+	print(content)
+	local result = ""
+	-- main loop - I tried using patterns but it did not work for every test case
+	local inPipes = false
+	for i = 1, #content do
+		local char = content:sub(i, i)
+		print(char)
+		-- Checking if we're in the pipe brackets
+		if char == "|" and inPipes == false then
+			print("in pipes")
+			inPipes = true
+			goto continue
+		
+		elseif char == "|" and inPipes == true then
+			print("left pipes")
+			inPipes = false
+			goto continue
+		end
+		
+		-- Handling hex data
+		if inPipes == true then
+			print("doing some plumbing")
+			if char ~= " " then
+				result = result .. char
+			end
+		-- Handling ascii data
+		else
+		print("hammer time")
+			result = result .. string.format("%02X", string.byte(char))
+		end
+		::continue::
+		print("end loop")
+	end
+return result
+end
+
+--[[
+	********TESTING*********
+str = "ABCD|0F A1|HELLO\",distance 0,nocase"
+result = ToBytes(str)
+print(result)
+--]]
+
+
+
 
 
 --------------------------------------------------------------------------------
