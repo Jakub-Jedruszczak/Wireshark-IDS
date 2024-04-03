@@ -1,8 +1,7 @@
 -- Jakub_IDS.lua
 --------------------------------------------------------------------------------
 --[[
-	
-_____                                             _____ 
+ _____                                             _____ 
 ( ___ )                                           ( ___ )
  |   |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|   | 
  |   |  ,-_/     .       .     ,-_/ .-,--.  .---.  |   | 
@@ -14,12 +13,10 @@ _____                                             _____
  |___|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|___| 
 (_____)                                           (_____)
 
-
-
-    This is an IDS created to work with Wireshark using various open source
-    signature databases. This plugin is intended to work with offline network
-    traffic captures, but it may be adjusted to work with real-time inputs.
--- ]]
+	This is an IDS created to work with Wireshark using various open source
+	signature databases. This plugin is intended to work with offline network
+	traffic captures, but it may be adjusted to work with real-time inputs.
+--]]
 --------------------------------------------------------------------------------
 
 local my_info = {
@@ -57,9 +54,8 @@ function SignatureReader(filename)
 			line:match("(%w+)%s+(%w+)%s+(%S+)%s+(%S+)%s+([%-<>]+)%s+(%S+)%s+(%S+)%s+%((.*)%)")
 
 		if not action then
-			print("Error: Unable to parse line: " .. line)
 			file:close()
-			return nil
+			return "Error: Unable to parse line: " .. line
 		end
 
 		-- Setting up key-value pairs
@@ -605,7 +601,7 @@ function MultiSigCheck(tvb, pinfo, tree, sigs)
 	if blacklisted_IPs[tostring(pinfo.src)] ~= nil then
 		blacklisted_IPs[tostring(pinfo.src)] = {blacklisted_IPs[tostring(pinfo.src)][1] + 1, blacklisted_IPs[tostring(pinfo.src)][2], blacklisted_IPs[tostring(pinfo.src)][3]}
 	end
-	return {-1, "h"}
+	return {-1}
 end
 
 
