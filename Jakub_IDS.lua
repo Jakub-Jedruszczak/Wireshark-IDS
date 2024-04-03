@@ -1,8 +1,7 @@
 -- Jakub_IDS.lua
 --------------------------------------------------------------------------------
 --[[
-	
-_____                                             _____ 
+ _____                                             _____ 
 ( ___ )                                           ( ___ )
  |   |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|   | 
  |   |  ,-_/     .       .     ,-_/ .-,--.  .---.  |   | 
@@ -14,12 +13,10 @@ _____                                             _____
  |___|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|___| 
 (_____)                                           (_____)
 
-
-
-    This is an IDS created to work with Wireshark using various open source
-    signature databases. This plugin is intended to work with offline network
-    traffic captures, but it may be adjusted to work with real-time inputs.
--- ]]
+	This is an IDS created to work with Wireshark using various open source
+	signature databases. This plugin is intended to work with offline network
+	traffic captures, but it may be adjusted to work with real-time inputs.
+--]]
 --------------------------------------------------------------------------------
 
 local my_info = {
@@ -57,9 +54,8 @@ function SignatureReader(filename)
 			line:match("(%w+)%s+(%w+)%s+(%S+)%s+(%S+)%s+([%-<>]+)%s+(%S+)%s+(%S+)%s+%((.*)%)")
 
 		if not action then
-			print("Error: Unable to parse line: " .. line)
 			file:close()
-			return nil
+			return "Error: Unable to parse line: " .. line
 		end
 
 		-- Setting up key-value pairs
@@ -74,6 +70,9 @@ function SignatureReader(filename)
 		-- Parsing options into a table
 		local options_table = {}
 		for key, value in options:gmatch("(%w+):\"?([^;]+)\"?;") do
+			if key == "content" then -- normalising content matching into bytes
+				value = ToBytes(value)
+			end
 			options_table[key] = value
 			if key == "sid" then
 				signature["sid"] = value
@@ -120,6 +119,58 @@ else
 	print("No signatures found or error occurred while parsing signatures.")
 end
 --]]
+
+
+
+
+
+function ToBytes(content)
+	content = content:sub(0, content:find('"')-1) -- only the part in quotes incasse it was parsed wrong earlier
+	print(content)
+	local result = ""
+	-- main loop - I tried using patterns but it did not work for every test case
+	local inPipes = false
+	for i = 1, #content do
+		local char = content:sub(i, i)
+		print(char)
+		-- Checking if we're in the pipe brackets
+		if char == "|" and inPipes == false then
+			print("in pipes")
+			inPipes = true
+			goto continue
+		
+		elseif char == "|" and inPipes == true then
+			print("left pipes")
+			inPipes = false
+			goto continue
+		end
+		
+		-- Handling hex data
+		if inPipes == true then
+			print("doing some plumbing")
+			if char ~= " " then
+				result = result .. char
+			end
+		-- Handling ascii data
+		else
+		print("hammer time")
+			result = result .. string.format("%02X", string.byte(char))
+		end
+		::continue::
+		print("end loop")
+	end
+return result
+end
+
+--[[
+	********TESTING*********
+str = "ABCD|0F A1|HELLO\",distance 0,nocase"
+result = ToBytes(str)
+print(result)
+--]]
+
+
+
 
 
 --------------------------------------------------------------------------------
@@ -299,6 +350,9 @@ function sus_p.dissector(tvb,pinfo,tree)
 	else
 		is_sus = "Benign"
 		reason = "The packet did not trigger any rules."
+		if result[2] ~= nil then
+			reason = reason .. "\n()" .. result[2] .. ")"
+		end
 	end
 
 	if pinfo.in_error_pkt then -- return value for error packets
@@ -312,7 +366,6 @@ function sus_p.dissector(tvb,pinfo,tree)
 	tree:add_le(sus_reason_field, reason)
 	--tree:add(sus_reason_field, reason)
 	tree:set_generated()
-
 end
 
 --------------------------------------------------------------------------------
@@ -550,7 +603,7 @@ function MultiSigCheck(tvb, pinfo, tree, sigs)
 	if blacklisted_IPs[tostring(pinfo.src)] ~= nil then
 		blacklisted_IPs[tostring(pinfo.src)] = {blacklisted_IPs[tostring(pinfo.src)][1] + 1, blacklisted_IPs[tostring(pinfo.src)][2], blacklisted_IPs[tostring(pinfo.src)][3]}
 	end
-	return {-1, "h"}
+	return {-1}
 end
 
 
@@ -639,13 +692,13 @@ local function ShowSignatures()
 			txt = txt .. "Signature SID " .. sid .. ":\n"
 			for key, value in pairs(signature) do
 				if type(value) == "table" then -- multi-valued inputs
-					txt = txt .. "  " .. key .. ": {"
+					txt = txt .. "  " .. key .. ": {\n"
 					for k, v in pairs(value) do
-						txt = txt .. k .. "=" .. v .. ","
+						txt = txt .. "          " .. k .. "=" .. v .. "\n"
 					end
-					txt = txt .. "}\n"
+					txt = txt .. "  }\n"
 				else
-					txt = txt .."  *" .. key .. "*: " .. value .. "\n"
+					txt = txt .."  " .. key .. ": " .. value .. "\n"
 				end
 			end
 		end
