@@ -765,5 +765,12 @@ function LogAlert(tvb, tree, pinfo, sid)
 	output = output .. "\n"
 
 	--printd(output) -- debug print
+	local file = io.open(path .. "alert.log", "a")
+	if not file then
+		printd(path .. "alert.log could not be opened")
+	end
+	file:write(output)
+	file:close()
+	
 	return output
 end
