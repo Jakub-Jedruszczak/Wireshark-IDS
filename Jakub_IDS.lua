@@ -676,6 +676,7 @@ function SignatureCheck(tvb, pinfo, tree, sid)
 	else
 		blacklisted_IPs[tostring(pinfo.src)] = {0, 1, {sid}}
 	end
+	LogAlert(tvb, tree, pinfo, sid)
 	return {1, sid}
 end
 
@@ -740,3 +741,29 @@ local function ShowSignatures()
 end
 
 register_menu("Signatures", ShowSignatures, MENU_TOOLS_UNSORTED)
+
+
+
+--------------------------------------------------------------------------------
+-- The logging function; this logs the alerts in standard SNORT format. Useful
+-- for making the tool compatible with other systems, for example SIEM systems.
+-- Because the format is going to be near identical, no extra parsing tools
+-- should be needed (hopefully). Note that this isn't SNORT's only output type,
+-- however it is the easiest to read for humans and therefore easier to debug.
+--------------------------------------------------------------------------------
+
+function LogAlert(tvb, tree, pinfo, sid)
+	local sig = signatures[sid]
+	local output = ""
+	output = output .. "[**] [1:" .. sid .. ":" .. sig["options"]["rev"].. "] " -- rule header
+	output = output .. sig["action"] .. " " .. sig["protocol"] .. " " .. tostring(pinfo.src) .. ":" .. tostring(pinfo.src_port) -- action, prot, source address/port
+	output = output .. " " .. sig["direction"] .. " " .. tostring(pinfo.dst) .. ":" .. tostring(pinfo.dst_port) -- direction, destination address/port
+	output = output .. " " .. sig["options"]["msg"]:sub(1, -2) .. " [**] " -- message and rule header ending
+	output = output .. "[Classification: " .. tostring(sig["options"]["classtype"]) .. "] " -- rule classification / metadata
+	output = output .. "[Priority: 1] " -- rule priority - the plugin currently doesn't calculate/ parse the priority correctly/ at all
+	output = output .. pinfo.abs_ts -- timestamp (relative to the start of the capture because of Wireshark baloney)
+	output = output .. "\n"
+
+	--printd(output) -- debug print
+	return output
+end
