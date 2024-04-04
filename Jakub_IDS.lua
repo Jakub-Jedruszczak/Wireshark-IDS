@@ -31,6 +31,27 @@ set_plugin_info(my_info)
 
 
 --------------------------------------------------------------------------------
+-- Debug output logging. Used to print some debugging information - since
+-- regular print() doesn't actually do anything.
+--------------------------------------------------------------------------------
+
+__DEBUG_OUTPUT = ""
+
+function DebugMenu()
+	local tw = TextWindow.new("DEBUG")
+	tw:append(__DEBUG_OUTPUT)
+end
+
+register_menu("Debug Menu", DebugMenu, MENU_TOOLS_UNSORTED)
+
+function printd(text)
+	__DEBUG_OUTPUT = __DEBUG_OUTPUT .. text .. "\n"
+end
+
+
+
+
+--------------------------------------------------------------------------------
 -- This function loads the signatures from a CSV file into Wireshark's memory.
 -- I decided to use the SNORT signature format for compatibility and so that
 -- users don't have to learn a new format. This doesn't use the ReadCSV function
