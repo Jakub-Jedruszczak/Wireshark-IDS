@@ -247,6 +247,24 @@ for ip, data in pairs(blacklist) do
 end
 --]]
 
+function SaveBlacklist(filename)
+	local file = io.open(path .. filename, "w") -- Open the file for writing
+	if not file then 
+		printd("Error: Unable to open file " .. filename .. " for writing")
+		return -1
+	end
+
+	for ip, values in pairs(blacklisted_IPs) do
+		local good_packets = values[1]
+		local bad_packets = values[2]
+		local matched_signatures = table.concat(values[3], " ") -- love this new function
+
+		file:write(ip .. "," .. good_packets .. "," .. bad_packets .. "," .. matched_signatures .. "\n")
+	end
+
+	file:close() -- Close the file
+end
+
 --------------------------------------------------------------------------------
 -- This creates the dialogue menu for changing the path to the file
 -- to be loaded. This is necessary because my way of guessing the Plugin folder
