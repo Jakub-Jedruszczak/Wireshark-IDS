@@ -247,6 +247,24 @@ for ip, data in pairs(blacklist) do
 end
 --]]
 
+function SaveBlacklist(filename)
+	local file = io.open(path .. filename, "w") -- Open the file for writing
+	if not file then 
+		printd("Error: Unable to open file " .. filename .. " for writing")
+		return -1
+	end
+
+	for ip, values in pairs(blacklisted_IPs) do
+		local good_packets = values[1]
+		local bad_packets = values[2]
+		local matched_signatures = table.concat(values[3], " ") -- love this new function
+
+		file:write(ip .. "," .. good_packets .. "," .. bad_packets .. "," .. matched_signatures .. "\n")
+	end
+
+	file:close() -- Close the file
+end
+
 --------------------------------------------------------------------------------
 -- This creates the dialogue menu for changing the path to the file
 -- to be loaded. This is necessary because my way of guessing the Plugin folder
@@ -297,7 +315,7 @@ io.input(f)
 content = io.read("*a") -- "*a" reads the entire file
 io.close(f)
 
-signatures = SignatureReader("rules.txt") -- loading signatures
+signatures = SignatureReader("jakub.rules") -- loading signatures
 
 --------------------------------------------------------------------------------
 -- Opens 'README.md' on loading Wireshark to confirm that the file loading
@@ -358,9 +376,20 @@ sus_p.fields = {sus_field}
 register_postdissector(sus_p)
 
 
+timer = 0 -- for checking when the timer is more than 5 seconds to update the blacklist
+
 -- main post-dissector
 function sus_p.dissector(tvb,pinfo,tree)
+	-- Blacklist updating
+	local current_time = pinfo.rel_ts
+	if current_time - timer > 5 then
+		printd(current_time - timer)
+		SaveBlacklist("blacklist.csv")
+		timer = current_time
+	end
 
+
+	-- Analysing the packet
 	local sp = pinfo.src_port
 	local reason = ""
 	local is_sus = 0
@@ -465,27 +494,9 @@ end
 
 --[[
 	TODO:
-	*MAKE SIGNATURES*
-	- Need to make signatures for detecting sus activity
-	- Need easy format: maybe NAME, PROTOCOL, TYPE (length check, header check, etc), VALUE TO CHECK AGAINST, PRIORITY???
-
-	*ALERT AND LOGGING*
-	- Output file which will store alerts
-	- Use a standard format so that it can be integrated into SIEMs
-
 	*BLACKLIST-BASED IP FILTER*
-	- Load IP Blacklist as a table
-		- FORMAT: {IP address:[good packet count, bad packet count, [matched signatures] ]}
 	- Every 5 seconds or so, check if an IP still belongs in the blacklist (see Meng et al. 2014)
 		- pinfo.rel_ts shows the relative time of the packet from when capture started
-	- Do the signatures that the source IP matched on in the past
-		- If it matches the signature(s), then mark as suspicious, add to the number of bad packets recieved, and mark as suspicious
-		- If it doesn't match any signatures, pass it to the NIDS for further inspection
-	
-	*MAIN IDS*
-	- Look for stuff that shows the packet doesn't need to be analysed (i.e, TCP flags, stuff like that)
-	- Check what signature sets to apply to the packet based on protocol/ port
-	- Check against the signatures using technqiues below
 
 	*CHECKING FOR SIGNATURE MATCHES*
 	- tvb:__tostring() converts the bytes of the tvb into a string (said to be used mostly for debugging)
@@ -499,12 +510,9 @@ end
 			- Do not add one to it's blacklist as it shouldn't exit yet, plus adding it would make no sense
 ]]
 
--- each entry will have the following format:
--- key: Source IP; Contents: array [bad packets, good packets]
-
 frame_protocols_f = Field.new("frame.protocols") -- For finding the highest protocol in the stack, e.g. "tcp" in the stack "eth:ethertype:ip:tcp"
 
-blacklisted_IPs = ReadBlacklist("blacklist.csv")
+blacklisted_IPs = ReadBlacklist("blacklist.csv") -- I know using globals is not great but this makes stuff easier
 
 
 function IDS(tvb, pinfo, tree)
@@ -634,9 +642,13 @@ end
 
 
 
--- TODO: MAKE THE SIG CHECK FUNCTIONS RETURN THE SIDS OF MATCHED SIGNATURES
--- ALL PACKETS ARE MARKED AS SUSPICIOUS
--- ADD IP TO BLACKLIST/ INCREMENT VALUE
+-- TODO: UPDATE BLACKLIST AND OUTPUT TO FILE (every 5 seconds)
+-- ALL PACKETS ARE MARKED AS SUSPICIOUS, FIX THAT
+-- WU-MANBER ALGORITHM
+-- DETERMINE WHERE TO USE WU-MANBER ALGORITHM
+-- ANALYSE DIFFERENT RULES? - RIGHT NOW ONLY THE FIRST ONE TO MATCH IT OUTPUT (this is good for most cases but makes the blacklist look simple/wrong)
+--
+
 
 
 
