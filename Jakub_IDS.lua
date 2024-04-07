@@ -13,6 +13,7 @@
  |___|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|___| 
 (_____)                                           (_____)
 
+
 	This is an IDS created to work with Wireshark using various open source
 	signature databases. This plugin is intended to work with offline network
 	traffic captures, but it may be adjusted to work with real-time inputs.
@@ -49,6 +50,55 @@ function printd(text)
 end
 
 
+--------------------------------------------------------------------------------
+-- This creates the dialogue menu for changing the path to the file
+-- to be loaded. This is necessary because my way of guessing the Plugin folder
+-- path may not be accurate, so changing this is pretty important in order for
+-- the program to work. Opens 'README.md' to confirm that the path works.
+--------------------------------------------------------------------------------
+
+-- Define the menu entry's callback
+local function dialog_menu()
+    local function dialog_func(p)
+        local window = TextWindow.new("Change the Plugin Folder Path")
+        local message = string.format("New path is %s\nIf this is correct, press Confirm.\nIf it works, the README should be printed\n", p)
+        window:set(message)
+        window:add_button("Confirm", function()
+            path = p:gsub('\\', '\\\\') -- replaces all single slashes with a double slash
+            local f = io.open(p .. "README.md", "r")
+            io.input(f)
+            content = io.read("*a") -- "*a" reads the entire file
+            io.close(f)
+            window:append(content)
+        end)
+    end
+
+    new_dialog("Change Path to Plugin Folder",dialog_func,"Current path: " .. path .. "\n\nNew path (End input in backslash):")
+end
+
+-- Create the menu entry
+register_menu("Change Path to Plugin Folder", dialog_menu, MENU_TOOLS_UNSORTED)
+
+--------------------------------------------------------------------------------
+-- This generates the plugin folder path from the major, minor and micro version
+-- numbers. The micro version is not in the folder name if it's 0, which is 
+-- accounted for with the if statement.
+--------------------------------------------------------------------------------
+
+-- Get version for automatically detecting the file path
+local major, minor, micro = get_version():match("(%d+)%.(%d+)%.(%d+)")
+
+-- Loads a file
+-- local default_path = "C:\\Program Files\\Wireshark\\plugins\\4.2\\" -- my personal path
+if micro == "0" then 
+    path = "C:\\Program Files\\Wireshark\\plugins\\" .. major .. "." .. minor .. "\\"
+else 
+    path = "C:\\Program Files\\Wireshark\\plugins\\" .. major .. "." .. minor ..  "." .. micro .. "\\"
+end
+f = io.open(path .. "README.md", "r")
+io.input(f)
+content = io.read("*a") -- "*a" reads the entire file
+io.close(f)
 
 
 --------------------------------------------------------------------------------
@@ -115,37 +165,8 @@ function SignatureReader(filename)
 end
 
 
---[[
-	************* TESTING *******************
-local filename = "rules.txt"
-local signatures = SignatureReader(filename)
 
-if signatures then
-	-- Display the parsed signatures
-	for sid, signature in pairs(signatures) do
-		print("Signature SID " .. sid .. ":")
-		for key, value in pairs(signature) do
-			if type(value) == "table" then -- multi-valued inputs
-				io.write("  " .. key .. ": {")
-				for k, v in pairs(value) do
-					io.write(k .. "=" .. v .. ",")
-				end
-				print("}")
-			else
-				print("  *" .. key .. "*: " .. value)
-			end
-		end
-	end
-else
-	print("No signatures found or error occurred while parsing signatures.")
-end
---]]
-
-
-
-
-
-function ToBytes(content)
+function ToBytes(content) -- makes all the `content` searches uniform by converting them all into bytes
 	content = content:sub(0, content:find('"')-1) -- only the part in quotes incasse it was parsed wrong earlier
 	print(content)
 	local result = ""
@@ -183,16 +204,6 @@ function ToBytes(content)
 return result
 end
 
---[[
-	********TESTING*********
-str = "ABCD|0F A1|HELLO\",distance 0,nocase"
-result = ToBytes(str)
-print(result)
---]]
-
-
-
-
 
 --------------------------------------------------------------------------------
 -- This function loads the signatures from a CSV file into Wireshark's memory.
@@ -224,30 +235,13 @@ function ReadBlacklist(filename)
 		end
 	end
 
-	file:close() -- Close the file
+	file:close()
 
-	return data -- Return the parsed blacklisted IP addresses
+	return data
 end
 
 
---[[
-	******************** TESTING ************************
-local filename = "blacklist.csv"
-local blacklist = ReadBlacklist(filename)
-
--- Print the parsed blacklisted IP addresses
-for ip, data in pairs(blacklist) do
-	print("IP address:", ip)
-	print("  Good Packet Count:", data[1])
-	print("  Bad Packet Count:", data[2])
-	print("  Matched Signatures:")
-	for _, signature_id in ipairs(data[3]) do
-		print("    -", signature_id)
-	end
-end
---]]
-
-function SaveBlacklist(filename)
+function SaveBlacklist(filename) -- saves the blacklist to a file
 	local file = io.open(path .. filename, "w") -- Open the file for writing
 	if not file then 
 		printd("Error: Unable to open file " .. filename .. " for writing")
@@ -265,90 +259,58 @@ function SaveBlacklist(filename)
 	file:close() -- Close the file
 end
 
+
 --------------------------------------------------------------------------------
--- This creates the dialogue menu for changing the path to the file
--- to be loaded. This is necessary because my way of guessing the Plugin folder
--- path may not be accurate, so changing this is pretty important in order for
--- the program to work. Opens 'README.md' to confirm that the path works.
+-- An implementation of Boyer-Moore-Horspool for string searching. It uses the
+-- Bad Match heuristic to generate a table which reduces the time complexity of
+-- the search from O((length of text - length of pattern +1) * length of pattern)
+-- to O(length of text * length of pattern), but in reality it's even better
+-- since it can skip over characters and blocks of text (Wheeler, 2006). Cool!
 --------------------------------------------------------------------------------
 
--- Define the menu entry's callback
-local function dialog_menu()
-    local function dialog_func(p)
-        local window = TextWindow.new("Change the Plugin Folder Path")
-        local message = string.format("New path is %s\nIf this is correct, press Confirm.\nIf it works, the README should be printed\n", p)
-        window:set(message)
-        window:add_button("Confirm", function()
-            path = p:gsub('\\', '\\\\') -- replaces all single slashes with a double slash
-            local f = io.open(p .. "README.md", "r")
-            io.input(f)
-            content = io.read("*a") -- "*a" reads the entire file
-            io.close(f)
-            window:append(content)
-        end)
-    end
-
-    new_dialog("Change Path to Plugin Folder",dialog_func,"Current path: " .. path .. "\n\nNew path (End input in backslash):")
+function BadMatch(pattern) -- builds the bad match table
+	local bad_match = {}
+	local pattern_length = string.len(pattern)
+	local last_char = string.sub(pattern, pattern_length, pattern_length)
+	
+	for i = 1, pattern_length - 1 do
+		local char = string.sub(pattern, i, i)
+		bad_match[char] = pattern_length - i
+	end
+	
+	-- Assign default shift value based on last character
+	bad_match[last_char] = pattern_length
+	
+	return bad_match
 end
 
--- Create the menu entry
-register_menu("Change Path to Plugin Folder", dialog_menu, MENU_TOOLS_UNSORTED)
-
---------------------------------------------------------------------------------
--- This generates the plugin folder path from the major, minor and micro version
--- numbers. The micro version is not in the folder name if it's 0, which is 
--- accounted for with the if statement.
---------------------------------------------------------------------------------
-
--- Get version for automatically detecting the file path
-local major, minor, micro = get_version():match("(%d+)%.(%d+)%.(%d+)")
-
--- Loads a file
--- local default_path = "C:\\Program Files\\Wireshark\\plugins\\4.2\\" -- my personal path
-if micro == "0" then 
-    path = "C:\\Program Files\\Wireshark\\plugins\\" .. major .. "." .. minor .. "\\"
-else 
-    path = "C:\\Program Files\\Wireshark\\plugins\\" .. major .. "." .. minor ..  "." .. micro .. "\\"
+function BoyerMooreHorspool(text, pattern)
+	-- Quite proud of how simple it is honestly
+	local bad_match = BadMatch(pattern)
+	local text_length = string.len(text)
+	local pattern_length = string.len(pattern)
+	local i = pattern_length
+	
+	while i <= text_length do
+		local j = pattern_length
+		local k = i -- index (I already used 'i', so 'k' it is)
+		
+		while j > 0 and string.sub(text, k, k) == string.sub(pattern, j, j) do
+			j = j - 1 -- as far as I know Lua has no 'j ++' or 'j += 1' operators
+			k = k - 1
+		end
+		
+		if j == 0 then
+			return k + 1  -- pattern found at index k in text
+		else
+			local char = string.sub(text, i, i)
+			i = i + (bad_match[char] or pattern_length) -- neat little line
+		end
+	end
+	
+	return -1  -- pattern not found in text
 end
-f = io.open(path .. "README.md", "r")
-io.input(f)
-content = io.read("*a") -- "*a" reads the entire file
-io.close(f)
 
-signatures = SignatureReader("jakub.rules") -- loading signatures
-
---------------------------------------------------------------------------------
--- Opens 'README.md' on loading Wireshark to confirm that the file loading
--- functionality works correctly. This entire project relies on loading external
--- files, so this is pretty important!
---------------------------------------------------------------------------------
-
-local graphic = [[
-  _____                                                                                                                  _____ 
- ( ___ )                                                                                                                 ( ___ )
- |       |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|       | 
- |       |      ,-_/                .                  .              ,-_/     .-,--.       .---.                      |       | 
- |       |        '  |      ,-.      |   ,     .    .     |--.        '      |     '   |   \     \___                    |        | 
- |       |           |     ,--|      |<      |    |    |     |       .^   |    ,    |   /            \                 |        | 
- |       |           |     `-^     '   `      `--^   ^--'       `---'    `-^--'         `---'                  |        | 
- |       |        /` |                                                                                                    |        | 
- |       |        `--'                                                                                                    |        | 
- |_____|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|_____|
- (_____)                                                                                                                (_____)
-
-]]
-
-
-
-
--- Notify the user that the menu was created
-if gui_enabled() then
-   local splash = TextWindow.new("Hello!");
-   splash:set(graphic)
-   splash:append("Hello! This is a test of file loading; if it works, the README should be printed. If this is not the case, go to Tools > Change Path To Plugin Folder")
-   splash:append("\nThe current version is " .. major .. "." .. minor .. "." .. micro .. "\n")
-   splash:append(content .. "\n")
-end
 
 
 --------------------------------------------------------------------------------
@@ -358,8 +320,6 @@ end
 -- (Adapted from https://wiki.wireshark.org/Lua/Examples/PostDissector)
 -- (partially)
 --------------------------------------------------------------------------------
-
-
 
 
 -- we create a "protocol" for our tree
@@ -416,75 +376,8 @@ function sus_p.dissector(tvb,pinfo,tree)
 	-- (https://osqa-ask.wireshark.org/questions/9511/is-it-possible-to-set-the-coloring-of-a-packet-from-a-dissector/)
 	tree:add(sus_field, is_sus)
 	tree:add_le(sus_reason_field, reason)
-	--tree:add(sus_reason_field, reason)
 	tree:set_generated()
 end
-
---------------------------------------------------------------------------------
--- An implementation of Boyer-Moore-Horspool for string searching. It uses the
--- Bad Match heuristic to generate a table which reduces the time complexity of
--- the search from O((length of text - length of pattern +1) * length of pattern)
--- to O(length of text * length of pattern), but in reality it's even better
--- since it can skip over characters and blocks of text (Wheeler, 2006). Cool!
---------------------------------------------------------------------------------
-
-function BadMatch(pattern) -- builds the bad match table
-	local bad_match = {}
-	local pattern_length = string.len(pattern)
-	local last_char = string.sub(pattern, pattern_length, pattern_length)
-	
-	for i = 1, pattern_length - 1 do
-		local char = string.sub(pattern, i, i)
-		bad_match[char] = pattern_length - i
-	end
-	
-	-- Assign default shift value based on last character
-	bad_match[last_char] = pattern_length
-	
-	return bad_match
-end
-
-function BoyerMooreHorspool(text, pattern)
-	-- Quite proud of how simple it is honestly
-	local bad_match = BadMatch(pattern)
-	local text_length = string.len(text)
-	local pattern_length = string.len(pattern)
-	local i = pattern_length
-	
-	while i <= text_length do
-		local j = pattern_length
-		local k = i -- index (I already used 'i', so 'k' it is)
-		
-		while j > 0 and string.sub(text, k, k) == string.sub(pattern, j, j) do
-			j = j - 1 -- as far as I know Lua has no 'j ++' or 'j += 1' operators
-			k = k - 1
-		end
-		
-		if j == 0 then
-			return k + 1  -- pattern found at index k in text
-		else
-			local char = string.sub(text, i, i)
-			i = i + (bad_match[char] or pattern_length) -- neat little line
-		end
-	end
-	
-	return -1  -- pattern not found in text
-end
-
---[[
-	************TESTING*****************
-local text = "this is a test string for testing the Boyer-Moore-Horspool algorithm"
-local pattern = "Horspool"
-
-local index = BoyerMooreHorspool(text, pattern)
-
-if index ~= -1 then
-	print("Pattern found at index:", index)
-else
-	print("Pattern not found in text.")
-end
-
---]]
 
 
 --------------------------------------------------------------------------------
@@ -513,6 +406,8 @@ end
 frame_protocols_f = Field.new("frame.protocols") -- For finding the highest protocol in the stack, e.g. "tcp" in the stack "eth:ethertype:ip:tcp"
 
 blacklisted_IPs = ReadBlacklist("blacklist.csv") -- I know using globals is not great but this makes stuff easier
+
+signatures = SignatureReader("jakub.rules") -- loading signatures
 
 
 function IDS(tvb, pinfo, tree)
@@ -785,4 +680,37 @@ function LogAlert(tvb, tree, pinfo, sid)
 	file:close()
 	
 	return output
+end
+
+--------------------------------------------------------------------------------
+-- Opens 'README.md' on loading Wireshark to confirm that the file loading
+-- functionality works correctly. This entire project relies on loading external
+-- files, so this is pretty important!
+--------------------------------------------------------------------------------
+
+local graphic = [[
+  _____                                                                                                                  _____ 
+ ( ___ )                                                                                                                 ( ___ )
+ |       |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|       | 
+ |       |      ,-_/                .                  .              ,-_/     .-,--.       .---.                      |       | 
+ |       |        '  |      ,-.      |   ,     .    .     |--.        '      |     '   |   \     \___                    |        | 
+ |       |           |     ,--|      |<      |    |    |     |       .^   |    ,    |   /            \                 |        | 
+ |       |           |     `-^     '   `      `--^   ^--'       `---'    `-^--'         `---'                  |        | 
+ |       |        /` |                                                                                                    |        | 
+ |       |        `--'                                                                                                    |        | 
+ |_____|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|_____|
+ (_____)                                                                                                                (_____)
+
+]]
+
+
+
+
+-- Notify the user that the menu was created
+if gui_enabled() then
+   local splash = TextWindow.new("Hello!");
+   splash:set(graphic)
+   splash:append("Hello! This is a test of file loading; if it works, the README should be printed. If this is not the case, go to Tools > Change Path To Plugin Folder")
+   splash:append("\nThe current version is " .. major .. "." .. minor .. "." .. micro .. "\n")
+   splash:append(content .. "\n")
 end
