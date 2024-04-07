@@ -376,9 +376,20 @@ sus_p.fields = {sus_field}
 register_postdissector(sus_p)
 
 
+timer = 0 -- for checking when the timer is more than 5 seconds to update the blacklist
+
 -- main post-dissector
 function sus_p.dissector(tvb,pinfo,tree)
+	-- Blacklist updating
+	local current_time = pinfo.rel_ts
+	if current_time - timer > 5 then
+		printd(current_time - timer)
+		SaveBlacklist("blacklist.csv")
+		timer = current_time
+	end
 
+
+	-- Analysing the packet
 	local sp = pinfo.src_port
 	local reason = ""
 	local is_sus = 0
