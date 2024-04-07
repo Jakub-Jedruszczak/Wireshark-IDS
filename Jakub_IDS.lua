@@ -494,27 +494,9 @@ end
 
 --[[
 	TODO:
-	*MAKE SIGNATURES*
-	- Need to make signatures for detecting sus activity
-	- Need easy format: maybe NAME, PROTOCOL, TYPE (length check, header check, etc), VALUE TO CHECK AGAINST, PRIORITY???
-
-	*ALERT AND LOGGING*
-	- Output file which will store alerts
-	- Use a standard format so that it can be integrated into SIEMs
-
 	*BLACKLIST-BASED IP FILTER*
-	- Load IP Blacklist as a table
-		- FORMAT: {IP address:[good packet count, bad packet count, [matched signatures] ]}
 	- Every 5 seconds or so, check if an IP still belongs in the blacklist (see Meng et al. 2014)
 		- pinfo.rel_ts shows the relative time of the packet from when capture started
-	- Do the signatures that the source IP matched on in the past
-		- If it matches the signature(s), then mark as suspicious, add to the number of bad packets recieved, and mark as suspicious
-		- If it doesn't match any signatures, pass it to the NIDS for further inspection
-	
-	*MAIN IDS*
-	- Look for stuff that shows the packet doesn't need to be analysed (i.e, TCP flags, stuff like that)
-	- Check what signature sets to apply to the packet based on protocol/ port
-	- Check against the signatures using technqiues below
 
 	*CHECKING FOR SIGNATURE MATCHES*
 	- tvb:__tostring() converts the bytes of the tvb into a string (said to be used mostly for debugging)
@@ -527,9 +509,6 @@ end
 	- If no sig. matches and it isn't in the blacklist, mark as benign and let it go
 			- Do not add one to it's blacklist as it shouldn't exit yet, plus adding it would make no sense
 ]]
-
--- each entry will have the following format:
--- key: Source IP; Contents: array [bad packets, good packets]
 
 frame_protocols_f = Field.new("frame.protocols") -- For finding the highest protocol in the stack, e.g. "tcp" in the stack "eth:ethertype:ip:tcp"
 
@@ -663,9 +642,13 @@ end
 
 
 
--- TODO: MAKE THE SIG CHECK FUNCTIONS RETURN THE SIDS OF MATCHED SIGNATURES
--- ALL PACKETS ARE MARKED AS SUSPICIOUS
--- ADD IP TO BLACKLIST/ INCREMENT VALUE
+-- TODO: UPDATE BLACKLIST AND OUTPUT TO FILE (every 5 seconds)
+-- ALL PACKETS ARE MARKED AS SUSPICIOUS, FIX THAT
+-- WU-MANBER ALGORITHM
+-- DETERMINE WHERE TO USE WU-MANBER ALGORITHM
+-- ANALYSE DIFFERENT RULES? - RIGHT NOW ONLY THE FIRST ONE TO MATCH IT OUTPUT (this is good for most cases but makes the blacklist look simple/wrong)
+--
+
 
 
 
