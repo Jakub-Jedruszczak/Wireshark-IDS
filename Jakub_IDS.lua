@@ -315,7 +315,7 @@ io.input(f)
 content = io.read("*a") -- "*a" reads the entire file
 io.close(f)
 
-signatures = SignatureReader("rules.txt") -- loading signatures
+signatures = SignatureReader("jakub.rules") -- loading signatures
 
 --------------------------------------------------------------------------------
 -- Opens 'README.md' on loading Wireshark to confirm that the file loading
