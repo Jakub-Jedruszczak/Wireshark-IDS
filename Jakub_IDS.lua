@@ -512,7 +512,7 @@ end
 
 frame_protocols_f = Field.new("frame.protocols") -- For finding the highest protocol in the stack, e.g. "tcp" in the stack "eth:ethertype:ip:tcp"
 
-blacklisted_IPs = ReadBlacklist("blacklist.csv")
+blacklisted_IPs = ReadBlacklist("blacklist.csv") -- I know using globals is not great but this makes stuff easier
 
 
 function IDS(tvb, pinfo, tree)
