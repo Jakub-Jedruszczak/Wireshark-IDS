@@ -612,6 +612,13 @@ end
 local function ShowBlacklist()
 	local tw = TextWindow.new("IP Blacklist")
 	local text = "" -- output
+	tw:add_button("Clear Blacklist", function()
+		for ip, _ in pairs(blacklisted_IPs) do
+			blacklisted_IPs[ip] = nil
+			tw:clear()
+		end
+	 end)
+
 	for ip, data in pairs(blacklisted_IPs) do
 		text = text .. "IP address:" .. ip .. "\n"
 		text = text .. "  Good Packet Count:" .. data[1] .."\n"
