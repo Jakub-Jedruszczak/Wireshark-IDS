@@ -412,6 +412,8 @@ end
 			- Do not add one to it's blacklist as it shouldn't exit yet, plus adding it would make no sense
 ]]
 
+BadPacketCount = 0 -- for debugging and evaluation
+
 frame_protocols_f = Field.new("frame.protocols") -- For finding the highest protocol in the stack, e.g. "tcp" in the stack "eth:ethertype:ip:tcp"
 
 blacklisted_IPs = ReadBlacklist("blacklist.csv") -- I know using globals is not great but this makes stuff easier
@@ -535,6 +537,7 @@ function MultiSigCheck(tvb, pinfo, tree, sigs)
 		--]]
 	end
 	-- No signature matched, increase good packet count by 1
+	BadPacketCount = BadPacketCount + 1
 	if blacklisted_IPs[tostring(pinfo.src)] ~= nil then
 		blacklisted_IPs[tostring(pinfo.src)] = {blacklisted_IPs[tostring(pinfo.src)][1] + 1, blacklisted_IPs[tostring(pinfo.src)][2], blacklisted_IPs[tostring(pinfo.src)][3]}
 	end
@@ -611,7 +614,7 @@ end
 
 local function ShowBlacklist()
 	local tw = TextWindow.new("IP Blacklist")
-	local text = "" -- output
+	local text = "Bad packet count: " .. BadPacketCount .. "\n\n" -- output; starts off with the number of total bad packets
 	tw:add_button("Clear Blacklist", function()
 		for ip, _ in pairs(blacklisted_IPs) do
 			blacklisted_IPs[ip] = nil
