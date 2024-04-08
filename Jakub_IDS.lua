@@ -242,7 +242,17 @@ end
 
 
 function SaveBlacklist(filename) -- saves the blacklist to a file
-	local file = io.open(path .. filename, "w") -- Open the file for writing
+	-- Assessing if an entry should remain in the blacklist
+	-- Using Meng et al.'s IP confidence equation
+	for ip, values in pairs(blacklisted_IPs) do
+		local IP_confidence = values[1] / (10 * values[2])
+		if IP_confidence >= 1 then
+			blacklisted_IPs[ip] = nil
+		end
+	end
+
+	-- Ssaving to file
+	local file = io.open(path .. filename, "w")
 	if not file then 
 		printd("Error: Unable to open file " .. filename .. " for writing")
 		return -1
