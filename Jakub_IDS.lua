@@ -587,7 +587,6 @@ function SignatureCheck(tvb, pinfo, tree, sid)
 		-- content matching here
 		-- Boyer-Moore-Horspool since it is a single signature search
 		local first_145_bytes = tostring(tvb:range(0, math.min(tvb:len(), 145)):bytes()) -- Wheeler (2006) says that only 145 bytes are needed to check 95% of SNORT rules
-		printd(first_145_bytes .. "\n" .. signature["options"]["content"] .. "\n")
 		if BoyerMooreHorspool(first_145_bytes, signature["options"]["content"]) == -1 then
 			return {-1}
 		end
@@ -616,6 +615,7 @@ local function ShowBlacklist()
 	local tw = TextWindow.new("IP Blacklist")
 	local text = "Bad packet count: " .. BadPacketCount .. "\n\n" -- output; starts off with the number of total bad packets
 	tw:add_button("Clear Blacklist", function()
+		BadPacketCount = 0
 		for ip, _ in pairs(blacklisted_IPs) do
 			blacklisted_IPs[ip] = nil
 			tw:clear()
@@ -623,10 +623,11 @@ local function ShowBlacklist()
 	 end)
 
 	for ip, data in pairs(blacklisted_IPs) do
-		text = text .. "IP address:" .. ip .. "\n"
-		text = text .. "  Good Packet Count:" .. data[1] .."\n"
-		text = text .. "  Bad Packet Count:" .. data[2] .. "\n"
-		text = text .. "  Matched Signatures: \n"
+		text = text .. "\nIP address: " .. ip .. "\n"
+		text = text .. "  Good Packet Count: " .. data[1] .."\n"
+		text = text .. "  Bad Packet Count: " .. data[2] .. "\n"
+		text = text .. "  IP Confidence: " .. string.format("%.3f", tostring(data[1] / (10 * data[2]))) .. "\n" -- Meng et al.'s IP confidence equation rounded to 3 d.p.
+		text = text .. "  Matched Signatures:\n"
 		for _, sid in ipairs(data[3]) do
 			text = text .. "    - ".. sid .. "\n"
 		end
@@ -637,14 +638,58 @@ end
 register_menu("IP Blacklist", ShowBlacklist, MENU_TOOLS_UNSORTED)
 
 
-local function ShowSignatures()
+local function ShowAlerts()
+	local tw = TextWindow.new("Alert Log")
+	local text = ""
+	tw:add_button("Clear Log", function()
+		io.open(path .. "alert.log","w"):close() -- clear alert log file
+			tw:clear()
+	 end)
+	local file = io.open(path .. "alert.log")
+	text = file:read("*a") -- "*a" reads the entire file
+	io.close(file)
+
+	-- Format text
+	text = text:gsub("\n", "\n\n")
+	local parts = {}
+	for part in text:gmatch("%s%[") do
+		table.insert(parts, part)
+	end
+
+	local formatted = text:gsub("%s%[", "\n[")
+
+	tw:set(formatted)
+end
+
+register_menu("Alert Log", ShowAlerts, MENU_TOOLS_UNSORTED)
+
+
+local function ShowSignatures(sid)
 	local tw = TextWindow.new("Signatures")
 	local txt = ""
+	tw:set_atclose(function() txt = "" end)
 	if signatures then
 		-- Display the parsed signatures
-		for sid, signature in pairs(signatures) do
+		if sid == "ALL" then
+			for sid_, signature in pairs(signatures) do
+				txt = txt .. "Signature SID " .. sid_ .. ":\n"
+				for key, value in pairs(signature) do
+					if type(value) == "table" then -- multi-valued inputs
+						txt = txt .. "  " .. key .. ": {\n"
+						for k, v in pairs(value) do
+							txt = txt .. "          " .. k .. "=" .. v .. "\n"
+						end
+						txt = txt .. "  }\n"
+					else
+						txt = txt .."  " .. key .. ": " .. value .. "\n"
+					end
+				end
+				txt = txt .. "\n"
+			end
+		else
+			if signatures[sid] == nil then txt = "No signatures found or error occurred while parsing signatures." return end
 			txt = txt .. "Signature SID " .. sid .. ":\n"
-			for key, value in pairs(signature) do
+			for key, value in pairs(signatures[sid]) do
 				if type(value) == "table" then -- multi-valued inputs
 					txt = txt .. "  " .. key .. ": {\n"
 					for k, v in pairs(value) do
@@ -670,7 +715,17 @@ local function ShowSignatures()
 
 end
 
-register_menu("Signatures", ShowSignatures, MENU_TOOLS_UNSORTED)
+
+local SID_d = ""
+function ShowSignaturesDialog(SID_d)
+	function ShowSignaturesDialog_(SID_d)
+		ShowSignatures(SID_d)
+	end
+	new_dialog("Enter SID", ShowSignaturesDialog_, "SID ('ALL' for all signatures):")
+end
+
+
+register_menu("Signatures", ShowSignaturesDialog, MENU_TOOLS_UNSORTED)
 
 
 
@@ -694,7 +749,7 @@ function LogAlert(tvb, tree, pinfo, sid)
 	output = output .. pinfo.abs_ts -- timestamp (relative to the start of the capture because of Wireshark baloney)
 	output = output .. "\n"
 
-	--printd(output) -- debug print
+
 	local file = io.open(path .. "alert.log", "a")
 	if not file then
 		printd(path .. "alert.log could not be opened")
