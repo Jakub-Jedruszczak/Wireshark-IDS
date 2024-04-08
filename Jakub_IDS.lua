@@ -242,7 +242,17 @@ end
 
 
 function SaveBlacklist(filename) -- saves the blacklist to a file
-	local file = io.open(path .. filename, "w") -- Open the file for writing
+	-- Assessing if an entry should remain in the blacklist
+	-- Using Meng et al.'s IP confidence equation
+	for ip, values in pairs(blacklisted_IPs) do
+		local IP_confidence = values[1] / (10 * values[2])
+		if IP_confidence >= 1 then
+			blacklisted_IPs[ip] = nil
+		end
+	end
+
+	-- Ssaving to file
+	local file = io.open(path .. filename, "w")
 	if not file then 
 		printd("Error: Unable to open file " .. filename .. " for writing")
 		return -1
@@ -343,7 +353,6 @@ function sus_p.dissector(tvb,pinfo,tree)
 	-- Blacklist updating
 	local current_time = pinfo.rel_ts
 	if current_time - timer > 5 then
-		printd(current_time - timer)
 		SaveBlacklist("blacklist.csv")
 		timer = current_time
 	end
@@ -538,7 +547,6 @@ end
 
 
 -- TODO: UPDATE BLACKLIST AND OUTPUT TO FILE (every 5 seconds)
--- ALL PACKETS ARE MARKED AS SUSPICIOUS, FIX THAT
 -- WU-MANBER ALGORITHM
 -- DETERMINE WHERE TO USE WU-MANBER ALGORITHM
 -- ANALYSE DIFFERENT RULES? - RIGHT NOW ONLY THE FIRST ONE TO MATCH IT OUTPUT (this is good for most cases but makes the blacklist look simple/wrong)
@@ -572,6 +580,7 @@ function SignatureCheck(tvb, pinfo, tree, sid)
 		-- content matching here
 		-- Boyer-Moore-Horspool since it is a single signature search
 		local first_145_bytes = tostring(tvb:range(0, math.min(tvb:len(), 145)):bytes()) -- Wheeler (2006) says that only 145 bytes are needed to check 95% of SNORT rules
+		printd(first_145_bytes .. "\n" .. signature["options"]["content"] .. "\n")
 		if BoyerMooreHorspool(first_145_bytes, signature["options"]["content"]) == -1 then
 			return {-1}
 		end
