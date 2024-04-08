@@ -573,9 +573,13 @@ function SignatureCheck(tvb, pinfo, tree, sid)
 	if string.find(tostring(frame_protocols_f()), signature["protocol"]) == nil then
 		return {-1}
 	end
-	--if (tostring(pinfo.src_port) ~= signature["source port"] and tostring(pinfo.src_port) ~= "any") or (tostring(pinfo.dst_port) ~= signature["destination port"] and tostring(pinfo.dst_port) ~= "any") then
-	--	return {-1}
-	--end
+	-- Check if packet ports match signature ports
+	if signature["source port"] ~= "any" and signature["source port"] ~= tostring(pinfo.src_port) then
+		return {-1}
+	end
+	if signature["destination port"] ~= "any" and signature["destination port"] ~= tostring(pinfo.dst_port) then
+		return {-1}
+	end
 	if signature["options"]["content"] ~= nil then
 		-- content matching here
 		-- Boyer-Moore-Horspool since it is a single signature search
