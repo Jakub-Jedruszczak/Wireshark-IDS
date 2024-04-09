@@ -457,8 +457,9 @@ function sus_p.dissector(tvb,pinfo,tree)
 	local result = IDS(tvb, pinfo, tree)
 
 	if result[1] == 1 then -- 1 means it matched
+		BadPacketCount = BadPacketCount + 1
 		is_sus = "Suspicious"
-		reason = "The packet triggered rules SID: " .. result[2]
+		reason = "The packet triggered rules SID: " .. result[2] .. "  (\"" .. signatures[result[2]]["options"]["msg"] .. ")"
 	else
 		is_sus = "Benign"
 		reason = "The packet did not trigger any rules."
@@ -493,19 +494,20 @@ blacklisted_IPs = ReadBlacklist("blacklist.csv") -- I know using globals is not 
 
 signatures = SignatureReader("jakub.rules") -- loading signatures
 
+all_sids = {} -- need a table of all signature IDs
 
 for key, _ in pairs(signatures) do
 	all_sids[key] = key
 end
 
 
+function IDS(tvb, pinfo, tree)
 	-- pinfo.in_error_pkt shows if the packet is an error packet
 	 if pinfo.in_error_pkt then
 		return -1
 	 end
 
 	-- Secondly checking for blacklisted IP addresses; inspired by Meng et al.'s (2014) work at reducing false positive rates
-	-- Expand blacklisted IPs with blacklisted user agents? (for HTTP(S) packets)
 	local ip_src = tostring(pinfo.src)
 	local result = {}
 
@@ -516,7 +518,7 @@ end
 			-- A signature has matched
 			return {1, result[2]}
 		end
-		result = MultiSigCheck(tvb, pinfo, tree, {"ALL"})
+		result = SignatureCheck(tvb, pinfo, tree, all_sids)
 		if  result[1] == 1 then
 			-- A signature has matched
 			return {1, result [2]}
@@ -527,14 +529,10 @@ end
 
 
 	else -- if the source IP is not in the blacklist
-		local result = MultiSigCheck(tvb, pinfo, tree, {"ALL"})
+		local result = SignatureCheck(tvb, pinfo, tree, all_sids)
 		if result[1] == 1 then
-		-- Call SignatureCheck() using all the signatures
-			-- If any of the signatures match, return "suspicious" and add the source IP to the blacklist and add the signature to the blacklist too
-				-- Also log the alert
-			-- If the packet doesn't match any signatures, its benign
 			-- A signature has matched
-			return {1, result[2]} -- ?
+			return {1, result[2]}
 		else
 			-- No signatures have matched
 			return {-1}
@@ -542,7 +540,97 @@ end
 	end
 end
 
+--------------------------------------------------------------------------------
+-- This is the function that checks the signatures; it goes over all of the
+-- ones that don't have a `contents` option first to determine if either 
+-- Wu-Manber or Boyer-Moore-Horspool is necessary.
+--------------------------------------------------------------------------------
 
+function SignatureCheck(tvb, pinfo, tree, sigs)
+	--[[
+	count the number of signatures that match (based on just the normal parts of the signature, not the contents/options)
+	if the number is past a threshold of maybe 10, then use Wu-Manber to check the contents; otherwise use Boyer-moore-Horspool
+
+	LOGIC:
+	- Check if the normal parameters (ports, IP, etc) are matching the signature
+	- If the signature has no contents/ other options (and it matches), perform a signature check on the signature (this is pretty much done at this point so return {1, sid}? )
+	- If there is a contents option, then add one to the MatchedContentSigs variable
+	- If the variable gets to like 15, then do Wu-Manber
+	- If it parsed all the sigs and there werent 15 or more content-optioned sigs then do Boyer-Moore-Horspool
+	--]]
+	sigs = sigs or all_sids
+
+	local MatchingSignatureCount = 0
+	local MatchingSignatureTable = {}
+	local WuManberThreshold = 15 -- arbitrary number
+
+
+	for tmp, sid in pairs(sigs) do
+		local signature = signatures[sid]
+		if signature == nil then -- must be an error or something
+			goto SkipSignature
+		end
+		-- Implementation of Figure 4.4
+		-- Check if the protocol matches the signature's protocol
+		if string.find(tostring(frame_protocols_f()), signature["protocol"]) == nil then
+			goto SkipSignature
+		end
+		-- Check if packet ports match signature ports
+		if signature["source port"] ~= "any" and signature["source port"] ~= tostring(pinfo.src_port) then
+			goto SkipSignature
+		end
+		if signature["destination port"] ~= "any" and signature["destination port"] ~= tostring(pinfo.dst_port) then
+			goto SkipSignature
+		end
+		-- Check if signature has contents to check for - don't check them yet though!
+		if signature["options"]["content"] ~= nil then
+			MatchingSignatureCount = MatchingSignatureCount + 1
+			MatchingSignatureTable[sid] = signature["options"]["content"]
+			if MatchingSignatureCount > WuManberThreshold then
+				goto EndDSALoop
+			end
+			goto SkipSignature -- needed because we haven't checked if the content actually matches yet
+		end
+		-- this means the packet matches the signature
+		-- log the packet
+		do -- `return` statements need to be in some kind of conditional otherwise you can't add anything after them
+			LogAlert(tvb, tree, pinfo, sid)
+			return {1, sid}
+		end
+
+		------------------------------------------------------------------------------------------------------------------------------------------------------
+		-- This is stil part of the loop so that if it fails then it keeps going with the loop
+		::EndDSALoop::
+		local first_145_bytes = tostring(tvb:range(0, math.min(tvb:len(), 145)):bytes())
+
+		-- Checking if Wu-Manber or Boyer-Moore-Horspool should be used
+		if MatchingSignatureCount > WuManberThreshold then
+			-- Do Wu-Manber
+			-- TODO: Do Wu-Manber
+			local result = WuManber(first_145_bytes, MatchingSignatureTable)
+			if result[1] == 1 then
+				return {1, result[2]}
+			end
+		else
+			-- Do Boyer-Moore-Horspool
+			for sid_, content in pairs(MatchingSignatureTable) do
+				if BoyerMooreHorspool(first_145_bytes, content) == 1 then
+					return {1, sid_}
+				end
+			end
+		end
+		::SkipSignature::
+	end
+	-- No signature matched, increase good packet count by 1
+	if blacklisted_IPs[tostring(pinfo.src)] ~= nil then
+		blacklisted_IPs[tostring(pinfo.src)] = {blacklisted_IPs[tostring(pinfo.src)][1] + 1, blacklisted_IPs[tostring(pinfo.src)][2], blacklisted_IPs[tostring(pinfo.src)][3]}
+	end
+	return {-1}
+end
+
+
+
+--[[
 function MultiSigCheck(tvb, pinfo, tree, sigs)
 	-- Check here for multiple signatures
 	-- Multiple calls to SignatureCheck()
@@ -563,44 +651,13 @@ function MultiSigCheck(tvb, pinfo, tree, sigs)
 				return {1, result[2]}
 			end
 		end
-		--[[
-		-- do the signatures in the signatures arg
-		for k, sid in pairs(sigs) do
-			local result = SignatureCheck(tvb, pinfo, tree, sid)
-			if result[1] == 1 then
-				return {1, sid}
-			end
-
-		end
-		--]]
 	end
 	-- No signature matched, increase good packet count by 1
-	BadPacketCount = BadPacketCount + 1
 	if blacklisted_IPs[tostring(pinfo.src)] ~= nil then
 		blacklisted_IPs[tostring(pinfo.src)] = {blacklisted_IPs[tostring(pinfo.src)][1] + 1, blacklisted_IPs[tostring(pinfo.src)][2], blacklisted_IPs[tostring(pinfo.src)][3]}
 	end
 	return {-1}
 end
-
-
-
-
-
-
--- TODO: UPDATE BLACKLIST AND OUTPUT TO FILE (every 5 seconds)
--- WU-MANBER ALGORITHM
--- DETERMINE WHERE TO USE WU-MANBER ALGORITHM
--- ANALYSE DIFFERENT RULES? - RIGHT NOW ONLY THE FIRST ONE TO MATCH IT OUTPUT (this is good for most cases but makes the blacklist look simple/wrong)
---
-
-
-
-
-
-
-
-
-
 
 
 function SignatureCheck(tvb, pinfo, tree, sid)
@@ -639,7 +696,7 @@ function SignatureCheck(tvb, pinfo, tree, sid)
 	LogAlert(tvb, tree, pinfo, sid)
 	return {1, sid}
 end
-
+--]]
 
 
 --------------------------------------------------------------------------------
@@ -776,6 +833,14 @@ register_menu("Signatures", ShowSignaturesDialog, MENU_TOOLS_UNSORTED)
 --------------------------------------------------------------------------------
 
 function LogAlert(tvb, tree, pinfo, sid)
+	-- Updating Blacklist
+	if blacklisted_IPs[tostring(pinfo.src)] ~= nil then
+		blacklisted_IPs[tostring(pinfo.src)] = {blacklisted_IPs[tostring(pinfo.src)][1], blacklisted_IPs[tostring(pinfo.src)][2] + 1, blacklisted_IPs[tostring(pinfo.src)][3]}
+	else
+		blacklisted_IPs[tostring(pinfo.src)] = {0, 1, {sid}}
+	end
+
+	-- Adding alert to log file
 	local sig = signatures[sid]
 	local output = ""
 	output = output .. "[**] [1:" .. sid .. ":" .. sig["options"]["rev"].. "] " -- rule header
