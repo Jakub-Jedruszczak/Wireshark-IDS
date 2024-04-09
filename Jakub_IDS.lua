@@ -485,24 +485,6 @@ end
 -- is suspicious or not.
 --------------------------------------------------------------------------------
 
---[[
-	TODO:
-	*BLACKLIST-BASED IP FILTER*
-	- Every 5 seconds or so, check if an IP still belongs in the blacklist (see Meng et al. 2014)
-		- pinfo.rel_ts shows the relative time of the packet from when capture started
-
-	*CHECKING FOR SIGNATURE MATCHES*
-	- tvb:__tostring() converts the bytes of the tvb into a string (said to be used mostly for debugging)
-	- tvb:raw() apparently also does something like this
-	- Boyer-Moore is good for medium-to-long signatures in long text
-			- Maybe use Boyer-Moore-Horspool like Snort: its simplified and only uses one table
-	- Maybe use a different one for very short (1-3 byte) signatures
-	- If a signature matches, add IP to blacklist along with all the signatures it matched
-	- If no signature matches and the IP is in the blacklist, add one to the number of good packets
-	- If no sig. matches and it isn't in the blacklist, mark as benign and let it go
-			- Do not add one to it's blacklist as it shouldn't exit yet, plus adding it would make no sense
-]]
-
 BadPacketCount = 0 -- for debugging and evaluation
 
 frame_protocols_f = Field.new("frame.protocols") -- For finding the highest protocol in the stack, e.g. "tcp" in the stack "eth:ethertype:ip:tcp"
@@ -512,42 +494,10 @@ blacklisted_IPs = ReadBlacklist("blacklist.csv") -- I know using globals is not 
 signatures = SignatureReader("jakub.rules") -- loading signatures
 
 
-function IDS(tvb, pinfo, tree)
-	--[[
-	RETURN VALUES:
-		-1 = error packet; mark as error
-		>1 = suspicious
-		0  = benign
+for key, _ in pairs(signatures) do
+	all_sids[key] = key
+end
 
-	IDENTIFIED PROTOCOLS:
-		- HTTP: a HTTP request packet
-		- data-text-lines: A HTTP response packet
-		- data: can be ICMP packets, "portmap" packets, TCP packets, NFS packets
-		- SLL: Linux Cooked-Mode Capture, essentially a bypass of Linux not dealing with libpcap well
-		- RPC: 
-		- MOUNT: 
-		- BITTORRENT: 
-		- SSH: 
-		- POP: 
-		- IMAP: 
-		- IMF: Internet message format, another mail protocol built alongside SMTP
-		- NFS: Network File System, probably worth checking this for malware
-		- 
-	
-	EXAMPLE SIGNATURES:
-		- Large ICMP/ping packets are VERY suspicious, do a length check, for example with bytearray:len()
-		- Frequency of packets, detecting DoS/ port scanning
-		- SSL/TLS check for HTTPS - don't scan much of those packets since they're encrypted
-		- Check for IPSec? Those are also encrypted
-		- 
-	]]
-
-	-- Firstly checking for flags and such that would make analysing the packet unnecessary
-	-- Routine protocols like ARP; probably better to do statistical sigs for them anyway
-	-- Encrypted protocols
-	-- Whitelists?
-	-- Internal network traffic - gotta be careful with this
-	-- (Do it here)
 
 	-- pinfo.in_error_pkt shows if the packet is an error packet
 	 if pinfo.in_error_pkt then
@@ -561,10 +511,7 @@ function IDS(tvb, pinfo, tree)
 
 	if blacklisted_IPs[ip_src] ~= nil then
 		-- Call SignatureCheck() using the signatures that match for the IP address
-			-- If any of the signatures match, return "suspicious" and increment the number of bad packets; send
-				-- Also log the alert
-			-- If the packet doesn't match any signatures, send it to the rest of the signatures
-		local result = MultiSigCheck(tvb, pinfo, tree, blacklisted_IPs[ip_src])
+		local result = SignatureCheck(tvb, pinfo, tree, blacklisted_IPs[ip_src][3])
 		if result[1] == 1 then
 			-- A signature has matched
 			return {1, result[2]}
