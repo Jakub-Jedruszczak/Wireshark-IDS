@@ -330,6 +330,89 @@ function BoyerMooreHorspool(text, pattern)
 end
 
 
+--------------------------------------------------------------------------------
+-- My implementation of Wu-Manber for multiple pattern searching. This uses 
+-- similar techniques to Boyer-Moore but applies it to multiple patterns at a
+-- time. This makes content matching potentially MUCH faster than normal.
+--------------------------------------------------------------------------------
+
+-- Define the HashPattern() function to generate a hash for each subpattern
+function HashPattern(pattern, start_index, end_index)
+	local hash = 0
+	for index = start_index, end_index - 1 do
+		hash = hash * 256 + pattern:byte(index)
+	end
+	return hash
+end
+
+-- Define the Wu Manber algorithm
+function WuManber(text, patterns)
+	-- Define the length of the text
+	local text_length = #text
+	local subpatterns = 2 -- number of subpatterns to split each pattern into; 2 is the standard for Wu-Manber
+
+	-- Iterate through each pattern
+	for _, pattern in ipairs(patterns) do
+		-- Define the length of the pattern
+		local pattern_length = #pattern
+
+		-- Define the length of each subpattern
+		local subpattern_length = math.floor(pattern_length / subpatterns) -- equivalent to python's  `pattern_length // subpatterns` (integer division)
+
+		-- Initialize the hash values for each subpattern
+		local subpattern_hashes = {}
+		for i = 1, subpatterns do
+			local start_index = (i - 1) * subpattern_length + 1
+			local end_index = i * subpattern_length
+			subpattern_hashes[i] = HashPattern(pattern, start_index, end_index)
+		end
+
+		-- Initialize the shift value for each subpattern
+		local subpattern_shifts = {}
+		for i = 1, subpatterns do
+			subpattern_shifts[i] = subpattern_length * (subpatterns - i)
+		end
+
+
+		-- Iterate through the text (the hard part)
+		for i = 1, text_length - pattern_length + 1 do
+			-- Check if the subpatterns match
+			local subpatterns_match = true
+			for j = 1, subpatterns do
+				local start_index = i + (j - 1) * subpattern_length
+				local end_index = i + j * subpattern_length - 1
+				if HashPattern(text, start_index, end_index) ~= subpattern_hashes[j] then
+					subpatterns_match = false
+					break
+				end
+			end
+
+			if subpatterns_match then -- probably could've made it better than just a true/false variable...
+				-- If the subpatterns match, check if the full pattern matches
+				if text:sub(i, i + pattern_length - 1) == pattern then -- basically list slicing
+					return {1}  -- Direct match found, return 1
+				end
+			end
+
+			-- Shift the pattern by the appropriate amount
+			local shift_applied = false
+			for j = 1, subpatterns do
+				if i + subpattern_shifts[j] <= text_length - pattern_length + 1 then
+					i = i + subpattern_shifts[j]
+					shift_applied = true
+					break
+				end
+			end
+
+			if not shift_applied then
+				i = i + 1
+			end
+		end
+	end
+	-- No match found, return -1
+	return {-1}
+end
+
 
 --------------------------------------------------------------------------------
 -- The main post-dissector of the plugin; this runs for every packet in order to
