@@ -126,7 +126,7 @@ io.close(f)
 function SignatureReader(filename)
 	local file = io.open(path .. filename, "r")
 	if not file then 
-		print("Error: Unable to open file " .. filename)
+		printd("Error: Unable to open file " .. filename)
 		return nil 
 	end
 
@@ -170,7 +170,7 @@ function SignatureReader(filename)
 		if signature["sid"] then
 			data[signature["sid"]] = signature
 		else
-			print("Error: Signature does not contain SID.")
+			printd("Error: Signature does not contain SID.")
 		end
 	end
 
@@ -183,38 +183,31 @@ end
 
 function ToBytes(content) -- makes all the `content` searches uniform by converting them all into bytes
 	content = content:sub(0, content:find('"')-1) -- only the part in quotes incasse it was parsed wrong earlier
-	print(content)
 	local result = ""
 	-- main loop - I tried using patterns but it did not work for every test case
 	local inPipes = false
 	for i = 1, #content do
 		local char = content:sub(i, i)
-		print(char)
 		-- Checking if we're in the pipe brackets
 		if char == "|" and inPipes == false then
-			print("in pipes")
 			inPipes = true
 			goto continue
 		
 		elseif char == "|" and inPipes == true then
-			print("left pipes")
 			inPipes = false
 			goto continue
 		end
 		
 		-- Handling hex data
 		if inPipes == true then
-			print("doing some plumbing")
 			if char ~= " " then
 				result = result .. char
 			end
 		-- Handling ascii data
 		else
-		print("hammer time")
-			result = result .. string.format("%02X", string.byte(char))
+			result = result .. string.format("%02X", string.byte(char)) -- formats the chatacter as a byte
 		end
 		::continue::
-		print("end loop")
 	end
 return result
 end
@@ -230,8 +223,8 @@ end
 
 function ReadBlacklist(filename)
 	local file = io.open(path .. filename, "r") -- Open the file
-	if not file then 
-		print("Error: Unable to open file " .. filename)
+	if not file then
+		printd("Error: Unable to open file " .. filename)
 		return nil
 	end
 
@@ -246,7 +239,7 @@ function ReadBlacklist(filename)
 			end
 			data[ip] = {tonumber(good_packets), tonumber(bad_packets), matched_signatures_table}
 		else
-			print("Error: Unable to parse line: " .. line)
+			printd("Error: Unable to parse line: " .. line)
 		end
 	end
 
