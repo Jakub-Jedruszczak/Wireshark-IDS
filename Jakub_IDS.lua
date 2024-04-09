@@ -46,7 +46,22 @@ end
 register_menu("Debug Menu", DebugMenu, MENU_TOOLS_UNSORTED)
 
 function printd(text)
-	__DEBUG_OUTPUT = __DEBUG_OUTPUT .. text .. "\n"
+	if text ~= nil then 
+		if type(text) == "table" then
+			for k, v in pairs(text) do
+				if type(v) == "table" then
+					for k_, v_ in pairs(v) do
+						__DEBUG_OUTPUT = __DEBUG_OUTPUT .. "        " ..  k_ .. ": " .. v_ .. "\n"
+					end
+				else
+					__DEBUG_OUTPUT = __DEBUG_OUTPUT .. "    " ..  k .. ": " .. v .. "\n"
+				end
+			end
+			__DEBUG_OUTPUT = __DEBUG_OUTPUT .. "\n"
+		else
+			__DEBUG_OUTPUT = __DEBUG_OUTPUT .. text .. "\n"
+		end
+	end
 end
 
 
