@@ -586,6 +586,7 @@ function SignatureCheck(tvb, pinfo, tree, sigs)
 	- If the variable gets to like 15, then do Wu-Manber
 	- If it parsed all the sigs and there werent 15 or more content-optioned sigs then do Boyer-Moore-Horspool
 	--]]
+
 	sigs = sigs or all_sids
 
 	local MatchingSignatureCount = 0
@@ -598,6 +599,7 @@ function SignatureCheck(tvb, pinfo, tree, sigs)
 		if signature == nil then -- must be an error or something
 			goto SkipSignature
 		end
+
 		-- Implementation of Figure 4.4
 		-- Check if the protocol matches the signature's protocol
 		if string.find(tostring(frame_protocols_f()), signature["protocol"]) == nil then
@@ -619,9 +621,10 @@ function SignatureCheck(tvb, pinfo, tree, sigs)
 			end
 			goto SkipSignature -- needed because we haven't checked if the content actually matches yet
 		end
+
 		-- this means the packet matches the signature
 		-- log the packet
-		do -- `return` statements need to be in some kind of conditional otherwise you can't add anything after them
+		do   -- `return` statements need to be in some kind of conditional otherwise you can't add anything after them
 			LogAlert(tvb, tree, pinfo, sid)
 			return {1, sid}
 		end
@@ -634,15 +637,19 @@ function SignatureCheck(tvb, pinfo, tree, sigs)
 		-- Checking if Wu-Manber or Boyer-Moore-Horspool should be used
 		if MatchingSignatureCount > WuManberThreshold then
 			-- Do Wu-Manber
-			-- TODO: Do Wu-Manber
 			local result = WuManber(first_145_bytes, MatchingSignatureTable)
 			if result[1] == 1 then
+				LogAlert(tvb, tree, pinfo, result[2])
 				return {1, result[2]}
 			end
+			-- Resetting the table/ counter
+			MatchingSignatureTable = {}
+			MatchingSignatureCount = 0
 		else
 			-- Do Boyer-Moore-Horspool
 			for sid_, content in pairs(MatchingSignatureTable) do
 				if BoyerMooreHorspool(first_145_bytes, content) == 1 then
+					LogAlert(tvb, tree, pinfo, sid_)
 					return {1, sid_}
 				end
 			end
@@ -738,10 +745,11 @@ local function ShowBlacklist()
 	local tw = TextWindow.new("IP Blacklist")
 	local text = "Bad packet count: " .. BadPacketCount .. "\n\n" -- output; starts off with the number of total bad packets
 	tw:add_button("Clear Blacklist", function()
+		io.open(path .. "blacklist.csv","w"):close()
+		tw:clear()
 		BadPacketCount = 0
 		for ip, _ in pairs(blacklisted_IPs) do
 			blacklisted_IPs[ip] = nil
-			tw:clear()
 		end
 	 end)
 
