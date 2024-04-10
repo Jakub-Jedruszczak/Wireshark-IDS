@@ -336,8 +336,8 @@ end
 -- time. This makes content matching potentially MUCH faster than normal.
 --------------------------------------------------------------------------------
 
--- Define the HashPattern() function to generate a hash for each subpattern
-function HashPattern(pattern, start_index, end_index)
+
+function HashPattern(pattern, start_index, end_index) -- sismple hash function for speed
 	local hash = 0
 	for index = start_index, end_index - 1 do
 		hash = hash * 256 + pattern:byte(index)
@@ -345,15 +345,13 @@ function HashPattern(pattern, start_index, end_index)
 	return hash
 end
 
--- Define the Wu Manber algorithm
+
 function WuManber(text, patterns)
-	-- Define the length of the text
 	local text_length = #text
 	local subpatterns = 2 -- number of subpatterns to split each pattern into; 2 is the standard for Wu-Manber
 
 	-- Iterate through each pattern
-	for _, pattern in ipairs(patterns) do
-		-- Define the length of the pattern
+	for pattern_key, pattern in pairs(patterns) do
 		local pattern_length = #pattern
 
 		-- Define the length of each subpattern
@@ -373,7 +371,6 @@ function WuManber(text, patterns)
 			subpattern_shifts[i] = subpattern_length * (subpatterns - i)
 		end
 
-
 		-- Iterate through the text (the hard part)
 		for i = 1, text_length - pattern_length + 1 do
 			-- Check if the subpatterns match
@@ -387,10 +384,10 @@ function WuManber(text, patterns)
 				end
 			end
 
-			if subpatterns_match then -- probably could've made it better than just a true/false variable...
+			if subpatterns_match then
 				-- If the subpatterns match, check if the full pattern matches
-				if text:sub(i, i + pattern_length - 1) == pattern then -- basically list slicing
-					return {1}  -- Direct match found, return 1
+				if text:sub(i, i + pattern_length - 1) == pattern then
+					return {1, pattern_key}  -- Direct match found, return 1 and pattern key
 				end
 			end
 
@@ -410,7 +407,7 @@ function WuManber(text, patterns)
 		end
 	end
 	-- No match found, return -1
-	return {-1}
+	return {-1, -1}
 end
 
 
