@@ -336,8 +336,8 @@ end
 -- time. This makes content matching potentially MUCH faster than normal.
 --------------------------------------------------------------------------------
 
--- Define the HashPattern() function to generate a hash for each subpattern
-function HashPattern(pattern, start_index, end_index)
+
+function HashPattern(pattern, start_index, end_index) -- sismple hash function for speed
 	local hash = 0
 	for index = start_index, end_index - 1 do
 		hash = hash * 256 + pattern:byte(index)
@@ -345,15 +345,13 @@ function HashPattern(pattern, start_index, end_index)
 	return hash
 end
 
--- Define the Wu Manber algorithm
+
 function WuManber(text, patterns)
-	-- Define the length of the text
 	local text_length = #text
 	local subpatterns = 2 -- number of subpatterns to split each pattern into; 2 is the standard for Wu-Manber
 
 	-- Iterate through each pattern
-	for _, pattern in ipairs(patterns) do
-		-- Define the length of the pattern
+	for pattern_key, pattern in pairs(patterns) do
 		local pattern_length = #pattern
 
 		-- Define the length of each subpattern
@@ -373,7 +371,6 @@ function WuManber(text, patterns)
 			subpattern_shifts[i] = subpattern_length * (subpatterns - i)
 		end
 
-
 		-- Iterate through the text (the hard part)
 		for i = 1, text_length - pattern_length + 1 do
 			-- Check if the subpatterns match
@@ -387,10 +384,10 @@ function WuManber(text, patterns)
 				end
 			end
 
-			if subpatterns_match then -- probably could've made it better than just a true/false variable...
+			if subpatterns_match then
 				-- If the subpatterns match, check if the full pattern matches
-				if text:sub(i, i + pattern_length - 1) == pattern then -- basically list slicing
-					return {1}  -- Direct match found, return 1
+				if text:sub(i, i + pattern_length - 1) == pattern then
+					return {1, pattern_key}  -- Direct match found, return 1 and pattern key
 				end
 			end
 
@@ -410,8 +407,34 @@ function WuManber(text, patterns)
 		end
 	end
 	-- No match found, return -1
-	return {-1}
+	return {-1, -1}
 end
+
+
+
+--[[
+-- TESTING!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+local patterns = {["A"] = "4FFFFB824FFFFB824FFFFB824FFFFB82",
+["B"] = "9090909090909090909090909090",
+["C"] = "03E0F82503E0F82503E0F82503E0F825",
+["D"] = "A61CC013A61CC013A61CC013A61CC013",
+["E"] = "801C4011801C4011801C4011801C4011",
+["F"] = "13C01CA613C01CA613C01CA613C01CA6",
+["F"] = "56A57763",
+["G"] = "08210280082102800821028008210280",
+["H"] = "8210201791D02008",
+["I"] = "909090E8C0FFFFFF2F62696E2F7368",
+["J"] = "B0B5CD80",
+["K"] = "240F1234240F1234240F1234240F1234",
+["L"] = "0B3902800B3902800B3902800B390280",
+["M"] = "B017CD80",
+["N"] = "47FF041F47FF041F47FF041F47FF041F",
+["O"] = "7569643D3028726F6F7429"}
+local result = WuManber("000400010006005056A577630000080045C00040EF14000001598A620A285501E00000050201002CC0A8F1F300000000EAD800000000000000000000FFFFFF00000A0201000000280A28550100000000", patterns)
+printd(result) -- expected result: {1, "F"}
+
+--]]
 
 
 --------------------------------------------------------------------------------
