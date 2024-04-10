@@ -482,8 +482,13 @@ function sus_p.dissector(tvb,pinfo,tree)
 	if result[1] == 1 then -- 1 means it matched
 		BadPacketCount = BadPacketCount + 1
 		is_sus = "Suspicious"
-		reason = "The packet triggered rules SID: " .. result[2] .. "  (\"" .. signatures[result[2]]["options"]["msg"] .. ")"
-	else
+		if signatures[result[2]] ~= nil then
+			reason = "The packet triggered rules SID: " .. result[2] .. "  (\"" .. signatures[result[2]]["options"]["msg"] .. ")"
+
+		else
+			reason = "Unkown signature was matched."
+		end
+		else
 		is_sus = "Benign"
 		reason = "The packet did not trigger any rules."
 		if result[2] ~= nil then
